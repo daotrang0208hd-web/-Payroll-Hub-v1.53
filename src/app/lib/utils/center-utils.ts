@@ -134,29 +134,40 @@ export function isNorthMktLocalL07(value: string): boolean {
   return (NORTH_MKT_LOCAL_L07_CODES as readonly string[]).includes(upper);
 }
 
-/**
- * Center resolver used only by MKT Local North Roster/Q_Roster. It mirrors the
- * original Pivot Master rules: normal center names resolve to their real L07,
- * while MKT aliases and the regional Hai Phong aggregate keep the dedicated
- * MKT Local L07.
- */
-export function resolveMktRosterCenter(rawCenter: string): {
+/** Resolve raw CHARGE TO CENTER from MKT Local Roster/Q_Roster to its real L07. */
+export function resolveMktRosterCenter(rawChargeToCenter: string): {
+  chargeToCenterMkt: string;
   l07: string;
   business: string;
 } {
-  const cleaned = String(rawCenter || "").trim();
+  const cleaned = String(rawChargeToCenter || "").trim();
+  if (!cleaned) {
+    return { chargeToCenterMkt: "", l07: "", business: "" };
+  }
+
   const normalized = normalizeCenterKey(cleaned);
 
-  let l07 = "";
+  // Preserve the two allocation destinations used by the reference ZIP.
+  if (normalized === "NTW") {
+    return { chargeToCenterMkt: "NTW", l07: "NTW", business: "AHN" };
+  }
   if (normalized === "HAIPHONG") {
-    l07 = "MKT LOCAL NORTH_HP";
-  } else if (normalized.includes("MKT") || normalized.includes("MARKETING")) {
-    l07 = resolveNorthMktLocalL07(cleaned) || "MKT LOCAL NORTH";
+    return {
+      chargeToCenterMkt: "Hai Phong",
+      l07: "Hai Phong",
+      business: "AHP",
+    };
+  }
+
+  let l07 = "";
+  if (normalized.includes("MKT") || normalized.includes("MARKETING")) {
+    l07 = resolveNorthMktLocalL07(cleaned) || mapL07(cleaned) || cleaned;
   } else {
-    l07 = mapL07(cleaned) || cleaned || "UNKNOWN";
+    l07 = mapL07(cleaned) || cleaned;
   }
 
   return {
+    chargeToCenterMkt: l07,
     l07,
     business: getBusinessFromL07(l07),
   };

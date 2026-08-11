@@ -1244,11 +1244,12 @@ export function AEDataConfig({
                   const duration = parseDurationToHours(rawDuration);
 
                   const notes = iNotes !== -1 && row[iNotes] !== undefined ? String(row[iNotes]).trim() : "";
-                  const chargeToCenterMkt = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
+                  const rawChargeToCenter = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
                   const rawCenter = iCenter !== -1 && row[iCenter] !== undefined ? String(row[iCenter]).trim() : "";
-                  const rawCenterForL07 = chargeToCenterMkt || rawCenter;
+                  const rawCenterForL07 = rawChargeToCenter || rawCenter;
                   const resolvedRosterCenter = resolveMktRosterCenter(rawCenterForL07);
-                  const l07 = resolvedRosterCenter.l07;
+                  const chargeToCenterMkt = resolvedRosterCenter.chargeToCenterMkt;
+                  const l07 = resolvedRosterCenter.l07 || "UNKNOWN";
                   const business = resolvedRosterCenter.business;
                   const reportMonth = normalizeMonth(itemMonth);
 

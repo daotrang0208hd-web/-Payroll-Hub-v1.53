@@ -5,6 +5,7 @@ import {
   normalizeMasterSheetName,
 } from "../lib/utils/master-sheet-utils";
 import { buildPivotFromAppData } from "../lib/utils/pivot-utils";
+import { resolveMktRosterCenter } from "../lib/utils/center-utils";
 
 function extractBankName(filename: string, fallbackBank?: string): string {
   const upper = filename.toUpperCase();
@@ -73,16 +74,12 @@ function parseMoneyToNumber(val: any): number {
 }
 
 function processTimesheetMktLogic(row: any) {
-  const mappedCenter = String(row.chargetocenterCode || "").trim();
-  let l07 = mappedCenter;
-  for (const [key, value] of Object.entries(rawCenterToMktMap)) {
-    if (key.toUpperCase() === mappedCenter.toUpperCase()) {
-      l07 = value;
-      break;
-    }
-  }
-  const bu = L07_TO_BU_MAP[l07] || "AHN";
-  return { bu, l07 };
+  const resolved = resolveMktRosterCenter(row.chargetocenterCode);
+  return {
+    bu: resolved.business || "OTHER",
+    l07: resolved.l07,
+    chargeToCenterMkt: resolved.chargeToCenterMkt,
+  };
 }
 
 function processNorthLogic(rawCenter: string) {
@@ -213,15 +210,15 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
         const durationColIdx = headers.findIndex((h: any) => {
           if (!h) return false;
           const val = String(h).trim().toUpperCase();
-          return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ';
+          return val === 'DURATION';
         });
         const typeColIdx = headers.findIndex((h: any) => {
           if (!h) return false;
           const val = String(h).trim().toUpperCase();
-          return val === 'TYPE' || val === 'LOẠI' || val === 'PHÂN LOẠI';
+          return val === 'TYPE';
         });
 
-        if (centerColIdx !== -1 && durationColIdx !== -1) {
+        if (centerColIdx !== -1 && durationColIdx !== -1 && typeColIdx !== -1) {
           for (let r = headerRowIdx + 1; r < jsonData.length; r++) {
             const row = jsonData[r];
             if (!row || row.length === 0) continue;
@@ -242,8 +239,11 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
 
             const mapped = processTimesheetMktLogic({ chargetocenterCode: String(rawCenter) });
             const finalL07 = mapped.l07 || rawCenter;
-            const finalBU = mapped.bu || "AHN";
-            const rawType = typeColIdx !== -1 ? row[typeColIdx] : "";
+            if (String(finalL07).trim().toUpperCase() === "MKT LOCAL NORTH") {
+              continue;
+            }
+            const finalBU = mapped.bu || "OTHER";
+            const rawType = row[typeColIdx];
             const finalType =
               String(rawType || "").trim().toUpperCase() || "UNSPECIFIED";
 

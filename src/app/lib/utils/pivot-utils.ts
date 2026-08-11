@@ -1,7 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getBusinessFromL07, mapL07 } from "./center-utils";
+import {
+  getBusinessFromL07,
+  mapL07,
+  resolveMktRosterCenter,
+} from "./center-utils";
 
-export const PIVOT_CACHE_VERSION = 2;
+export const PIVOT_CACHE_VERSION = 3;
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -85,7 +89,7 @@ const KNOWN_NON_CHARGE_KEYS = new Set([
   "NO", "ID NUMBER", "FULL NAME", "BANK ACCOUNT NUMBER", "BANK NAME",
   "CITAD CODE", "TAX CODE", "CONTRACT NO", "TOTAL PAYMENT", "CENTER",
   "BUSINESS", "BU", "L07", "_RAWAE", "THÁNG", "SALARY SCALE", "FROM", "TO", "TYPE",
-  "CHARGE TO CENTER", "CHARGE TO CENTER CODE", "CHARGETOCENTERCODE"
+  "CHARGE TO CENTER", "CHARGE TO CENTER MKT", "CHARGE TO CENTER CODE", "CHARGETOCENTERCODE"
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -134,31 +138,73 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     newGroupedData[bu][l07][month][type] += amount;
   };
 
-  // MKT Local North is supplied twice by the Master flow:
-  // 1) Gross Pay contains one aggregate "Charge MKT Local" amount.
-  // 2) Roster/Q_Roster contains the detailed replacement by TYPE and center.
-  // When detailed Roster data exists, the aggregate must not be added again.
-  const mktRosterDetailMonths = new Set<string>();
-  rosterRows.forEach((row) => {
-    if (!row) return;
-    const type = String(
-      row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || "",
-    ).trim();
-    const center = String(
+  const rosterAllocations = rosterRows.flatMap((row) => {
+    if (!row) return [];
+
+    const rawChargeToCenter = String(
       row["chargeToCenterCode"] ||
-        row["chargeToCenterMkt"] ||
         row["CHARGE TO CENTER"] ||
+        row["chargeToCenterMkt"] ||
+        row["charge_to_center_mkt"] ||
+        row["Charge to Center MKT"] ||
         row["Center"] ||
         row["center"] ||
         "",
     ).trim();
-    if (!type || !center) return;
-    mktRosterDetailMonths.add(
-      String(
-        row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026",
-      ).trim(),
+    const resolved = resolveMktRosterCenter(rawChargeToCenter);
+    const storedL07 = String(row["l07"] || row["L07"] || "").trim();
+    const l07 = resolved.l07 || storedL07;
+
+    // The aggregate is replaced by allocations to real Charge To Center L07s.
+    if (!l07 || l07.toUpperCase() === "MKT LOCAL NORTH") return [];
+
+    const duration = parseMoney(
+      row["duration"] || row["DURATION"] || row["HOURS"] || 0,
     );
+    const calculatedSalary = parseMoney(
+      row["calculatedSalary"] || row["CALCULATED SALARY"] || 0,
+    );
+    const durationIsHours =
+      String(row["_durationUnit"] || row["durationUnit"] || "")
+        .trim()
+        .toLowerCase() === "hours" ||
+      row["isMktLocal"] === true ||
+      Object.prototype.hasOwnProperty.call(row, "charge_to_center_mkt");
+    const salary =
+      calculatedSalary || duration * (durationIsHours ? 20000 : 24 * 20000);
+    const month = String(
+      row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026",
+    ).trim();
+    const type = String(
+      row["type"] ||
+        row["Type"] ||
+        row["LOẠI"] ||
+        row["Phân loại"] ||
+        row["Nghiệp vụ"] ||
+        "UNSPECIFIED",
+    ).trim();
+
+    if (!type || salary <= 0 || !Number.isFinite(salary)) return [];
+
+    return [
+      {
+        bu:
+          resolved.business ||
+          row["bu"] ||
+          row["Business"] ||
+          row["business"] ||
+          getBusinessFromL07(l07),
+        l07,
+        month,
+        type,
+        salary,
+      },
+    ];
   });
+
+  const rosterAllocationMonths = new Set(
+    rosterAllocations.map((allocation) => allocation.month),
+  );
 
   sheet1Rows.forEach((row) => {
     if (!row) return;
@@ -173,12 +219,12 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     const bu = row["Business"] || row["BU"] || getBusinessFromL07(l07);
     const month = row["Tháng báo cáo"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     if (!l07) return;
-    const isMktLocalNorthAggregate = /^MKT LOCAL NORTH(?:_|$)/i.test(
-      String(l07).trim(),
-    );
-    const hasMktRosterTypeDetails = mktRosterDetailMonths.has(
-      String(month).trim(),
-    );
+    if (
+      String(l07).trim().toUpperCase() === "MKT LOCAL NORTH" &&
+      rosterAllocationMonths.has(String(month).trim())
+    ) {
+      return;
+    }
 
     // Check if row contains individual charge columns
     let processedChargeCols = false;
@@ -190,16 +236,6 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
       if (uKey.includes("CHARGE") || uKey.startsWith("LDEC") || uKey.startsWith("LDEM") || uKey.startsWith("LPAR") || uKey.startsWith("LRET") || uKey.startsWith("MOTH")) {
         const amt = parseMoney(row[key]);
         const cleanType = formatPivotTypeHeader(key);
-        if (
-          hasMktRosterTypeDetails &&
-          isMktLocalNorthAggregate &&
-          cleanType === "MKT LOCAL"
-        ) {
-          // Mark the aggregate as handled even when its value is zero, so the
-          // TOTAL PAYMENT fallback cannot recreate the removed MKT LOCAL column.
-          processedChargeCols = true;
-          return;
-        }
         if (amt !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
           processedChargeCols = true;
           addAmount(bu, l07, month, key, amt);
@@ -219,23 +255,8 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
 
   // holdRows removed as per user request ("xóa hold đi, ko lấy dữ liệu sheet hold ae_master")
 
-  rosterRows.forEach((row) => {
-    if (!row) return;
-    const center = row["chargeToCenterCode"] || row["chargeToCenterMkt"] || row["CHARGE TO CENTER"] || row["Center"] || row["center"] || "";
-    const duration = parseMoney(row["duration"] || row["DURATION"] || row["HOURS"] || 0);
-    const calculatedSalary = parseMoney(row["calculatedSalary"] || row["CALCULATED SALARY"] || 0);
-    const durationIsHours =
-      String(row["_durationUnit"] || row["durationUnit"] || "").toLowerCase() === "hours" ||
-      row["isMktLocal"] === true;
-    const salary = calculatedSalary || duration * (durationIsHours ? 20000 : 24 * 20000);
-    const bu = row["bu"] || row["Business"] || "AHN";
-    const l07 = row["l07"] || row["L07"] || center || "MKT LOCAL NORTH";
-    const month = row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
-    const rowType = row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "UNSPECIFIED";
-
-    if (salary > 0 && l07) {
-      addAmount(bu, l07, month, rowType, salary);
-    }
+  rosterAllocations.forEach(({ bu, l07, month, type, salary }) => {
+    addAmount(String(bu), l07, month, type, salary);
   });
 
   const sortedTypes = Array.from(uniqueTypes).sort((a, b) => {

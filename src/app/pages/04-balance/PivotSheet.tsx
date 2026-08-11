@@ -25,6 +25,7 @@ import {
   buildPivotFromAppData,
   PIVOT_CACHE_VERSION,
 } from "../../lib/utils/pivot-utils";
+import { resolveMktRosterCenter } from "../../lib/utils/center-utils";
 import { toast } from "sonner";
 import {
   Select,
@@ -307,40 +308,12 @@ function processNorthLogic(rawCenter: string) {
 }
 
 function processTimesheetMktLogic(inputData: { chargetocenterCode: string }) {
-  const { chargetocenterCode } = inputData;
-  const cleaned = chargetocenterCode ? String(chargetocenterCode).trim() : "";
-  let chargeToCenterMkt = cleaned;
-
-  for (const [key, value] of Object.entries(rawCenterToMktMap)) {
-    if (key.toUpperCase() === cleaned.toUpperCase()) {
-      chargeToCenterMkt = value;
-      break;
-    }
-  }
-
-  if (chargeToCenterMkt === cleaned) {
-    const upperClean = cleaned.toUpperCase();
-    if (upperClean.includes("THAI HA") || upperClean.includes("THÁI HÀ")) chargeToCenterMkt = "HN0002.THA";
-    else if (upperClean.includes("XUAN DIEU") || upperClean.includes("XUÂN DIỆU") || upperClean.includes("LAC LONG QUAN") || upperClean.includes("LẠC LONG QUÂN")) chargeToCenterMkt = "HN0032.LLQ";
-    else if (upperClean.includes("OCEAN PARK") || upperClean.includes("OCEPARK")) chargeToCenterMkt = "HN0027.OPK";
-  }
-
-  const l07 = chargeToCenterMkt;
-  let bu = "OTHER";
-
-  if (l07 === "AA" || l07 === "ZHN0000.GY" || l07 === "HN0200.ASP" || l07.startsWith("HN") || l07.startsWith("BN") || l07.startsWith("HY") || l07.startsWith("QN") || l07.startsWith("VIN") || l07.startsWith("VP")) {
-    bu = "AHN";
-  } else if (l07.startsWith("HP") || l07.toUpperCase() === "HAI PHONG") {
-    bu = "AHP";
-  } else if (l07.startsWith("TN") || l07 === "Thai Nguyen") {
-    bu = "ATN";
-  } else if (l07.startsWith("TH") || l07 === "Thanh Hoa") {
-    bu = "ATH";
-  } else if (l07.startsWith("PT") || l07 === "Phu Tho") {
-    bu = "APT";
-  }
-
-  return { chargeToCenterMkt, l07, bu };
+  const resolved = resolveMktRosterCenter(inputData.chargetocenterCode);
+  return {
+    chargeToCenterMkt: resolved.chargeToCenterMkt,
+    l07: resolved.l07,
+    bu: resolved.business || "OTHER",
+  };
 }
 
 function parseMonthFromFileName(fileName: string, globalMonth?: string): string | null {
@@ -928,6 +901,8 @@ export function PivotSheet() {
 
             const mapped = processTimesheetMktLogic({ chargetocenterCode: String(rawCenter) });
             const { bu, l07 } = mapped;
+
+            if (!l07 || l07.toUpperCase() === "MKT LOCAL NORTH") continue;
 
             if (!newGroupedData[bu]) newGroupedData[bu] = {};
             if (!newGroupedData[bu][l07]) newGroupedData[bu][l07] = {};
