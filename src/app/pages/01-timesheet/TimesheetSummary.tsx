@@ -27,7 +27,6 @@ import {
   mapL07,
   getBusinessFromL07,
 } from "../../lib/utils/center-utils";
-import { resolveTimesheetCenterFromFileName } from "../../lib/utils/timesheet-input-resolver";
 import { 
   generateUUID, 
   prepareDataForExport,
@@ -193,20 +192,17 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
         for (const f of driveFiles) {
           const fileName = String(f.name || "");
-          const configuredCenter = resolveTimesheetCenterFromFileName(fileName, currentInputs);
-          const l07 = configuredCenter?.l07 || getL07FromFileName(fileName) || "";
+          const l07 = getL07FromFileName(fileName) || "";
           if (!l07) {
             skipCount++;
             continue;
           }
           const centerInfo = getCenterInfoByL07(l07);
-          const aeCode = configuredCenter?.aeCode || centerInfo?.aeCode || "";
-          const bu = configuredCenter?.bus || getBusinessFromL07(l07);
+          const aeCode = centerInfo?.aeCode || "";
+          const bu = getBusinessFromL07(l07);
 
           // Matching logic similar to bulk Excel upload
-          let matchIndex = configuredCenter
-            ? currentInputs.findIndex((r) => r.id === configuredCenter.id)
-            : currentInputs.findIndex((r) => {
+          let matchIndex = currentInputs.findIndex((r) => {
             const rowL07 = r.l07 ? mapL07(r.l07).toLowerCase() : "";
             const rowAE = r.aeCode ? r.aeCode.toLowerCase() : "";
             const matchL07 = l07 && rowL07 === l07.toLowerCase();
@@ -281,10 +277,9 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               toast.error(`Lỗi xử lý ${item.file.name}: ${msg}`);
             }
             
-            // Nhường main thread ngắn giữa hai file; API đã tự retry/backoff khi
-            // Google trả 429 nên không cần chờ cứng 1,5 giây cho từng file.
+            // 3. Wait 1500ms before next file to avoid rate limits (except for the last one)
             if (i < toProcess.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 150));
+              await new Promise(resolve => setTimeout(resolve, 1500));
             }
           }
           
@@ -765,14 +760,11 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     }
 
     for (const file of filteredFiles) {
-      const configuredCenter = resolveTimesheetCenterFromFileName(file.name, updatedInputs);
-      const l07 = configuredCenter?.l07 || getL07FromFileName(file.name) || "";
+      const l07 = getL07FromFileName(file.name) || "";
       const centerInfo = l07 ? getCenterInfoByL07(l07) : null;
-      const aeCode = configuredCenter?.aeCode || centerInfo?.aeCode || "";
+      const aeCode = centerInfo?.aeCode || "";
 
-      const matchIndex = configuredCenter
-        ? updatedInputs.findIndex((r) => r.id === configuredCenter.id)
-        : updatedInputs.findIndex((r) => {
+      const matchIndex = updatedInputs.findIndex((r) => {
         const matchL07 =
           l07 && r.l07 && r.l07.toLowerCase() === l07.toLowerCase();
         const matchAE =
@@ -795,7 +787,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           id: newId,
           l07: l07,
           aeCode: aeCode,
-          bus: configuredCenter?.bus || centerInfo?.bus || "",
+          bus: centerInfo?.bus || "",
           status: "processing",
           url: defaultUrl
         });
@@ -884,18 +876,16 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       const nextInputs = updatedInputs.map((input) => {
         const result = statusById.get(input.id);
         if (!result) return input;
-        const configuredCenter = resolveTimesheetCenterFromFileName(result.file.name, updatedInputs);
-        const detectedL07 = configuredCenter?.l07 || getL07FromFileName(result.file.name) || "";
+        const detectedL07 = getL07FromFileName(result.file.name) || "";
         const centerInfo = detectedL07
           ? getCenterInfoByL07(detectedL07)
           : null;
         return {
           ...input,
           l07: input.l07 || detectedL07,
-          aeCode: input.aeCode || configuredCenter?.aeCode || centerInfo?.aeCode || "",
+          aeCode: input.aeCode || centerInfo?.aeCode || "",
           bus:
             input.bus ||
-            configuredCenter?.bus ||
             centerInfo?.bus ||
             (detectedL07 ? getBusinessFromL07(detectedL07) : ""),
           status: result.error ? ("error" as const) : ("success" as const),
@@ -1095,7 +1085,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       />
 
       <div 
-        className="unified-table-frame bg-card flex-1 flex flex-col min-h-0 w-full relative border border-border rounded-none shadow-sm overflow-hidden"
+        className="bg-card flex-1 flex flex-col min-h-0 w-full relative border-border rounded-none border-[0.5px]"
         style={{ paddingLeft: "0px", paddingTop: "0px", paddingBottom: "0px", paddingRight: "0px" }}
       >
         <div className="absolute inset-0 bg-accent/5 opacity-[0.05] pointer-events-none hidden" />
