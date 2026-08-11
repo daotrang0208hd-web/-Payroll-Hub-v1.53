@@ -4,8 +4,9 @@ import {
   mapL07,
   resolveMktRosterCenter,
 } from "./center-utils";
+import { parseDurationToHours } from "../schemas/excel-schema";
 
-export const PIVOT_CACHE_VERSION = 3;
+export const PIVOT_CACHE_VERSION = 4;
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -158,20 +159,37 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     // The aggregate is replaced by allocations to real Charge To Center L07s.
     if (!l07 || l07.toUpperCase() === "MKT LOCAL NORTH") return [];
 
-    const duration = parseMoney(
-      row["duration"] || row["DURATION"] || row["HOURS"] || 0,
-    );
+    const rawDuration =
+      row["duration"] ?? row["DURATION"] ?? row["HOURS"] ?? "";
+    let duration = parseDurationToHours(rawDuration);
+
+    // Recover legacy rows that were already persisted with the old 1899-hour
+    // bug. Their From/To cells still retain the original Excel clock values.
+    if (duration <= 0 && rawDuration !== "") {
+      const startHours = parseDurationToHours(
+        row["gio_vao"] ?? row["from"] ?? row["From"] ?? "",
+      );
+      const endHours = parseDurationToHours(
+        row["gio_ra"] ?? row["to"] ?? row["To"] ?? "",
+      );
+      if (endHours > 0 && startHours >= 0) {
+        duration = endHours >= startHours
+          ? endHours - startHours
+          : 24 - startHours + endHours;
+      }
+    }
     const calculatedSalary = parseMoney(
       row["calculatedSalary"] || row["CALCULATED SALARY"] || 0,
     );
-    const durationIsHours =
-      String(row["_durationUnit"] || row["durationUnit"] || "")
-        .trim()
-        .toLowerCase() === "hours" ||
-      row["isMktLocal"] === true ||
-      Object.prototype.hasOwnProperty.call(row, "charge_to_center_mkt");
-    const salary =
-      calculatedSalary || duration * (durationIsHours ? 20000 : 24 * 20000);
+    const hasRawDuration =
+      rawDuration !== null &&
+      rawDuration !== undefined &&
+      String(rawDuration).trim() !== "";
+    const salary = duration > 0
+      ? duration * 20000
+      : hasRawDuration
+        ? 0
+        : calculatedSalary;
     const month = String(
       row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026",
     ).trim();

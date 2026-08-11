@@ -26,6 +26,8 @@ import {
   PIVOT_CACHE_VERSION,
 } from "../../lib/utils/pivot-utils";
 import { resolveMktRosterCenter } from "../../lib/utils/center-utils";
+import { parseDurationToHours } from "../../lib/schemas/excel-schema";
+import { parseMoneyToNumber as parseExcelMoney } from "../../lib/utils/data-utils";
 import { toast } from "sonner";
 import {
   Select,
@@ -40,9 +42,7 @@ import {
 // ==========================================
 
 export function parseMoneyToNumber(val: any): number {
-  if (typeof val === 'number') return val;
-  if (!val) return 0;
-  return Number(String(val).replace(/[^\d.-]/g, '')) || 0;
+  return parseExcelMoney(val);
 }
 
 export function formatNumber(val: any): string {
@@ -860,8 +860,7 @@ export function PivotSheet() {
 
             chargeCols.forEach(col => {
               const rawVal = row[col.index];
-              let val = parseFloat(rawVal);
-              if (isNaN(val)) val = 0;
+              const val = parseExcelMoney(rawVal);
 
               if (val === 0 && rawVal) {
                 newLogs.push({ Source: "NORTH", File: item.name, RawCenter: rawCenter, Column: col.label, RawValue: rawVal });
@@ -908,9 +907,8 @@ export function PivotSheet() {
             if (!newGroupedData[bu][l07]) newGroupedData[bu][l07] = {};
             if (!newGroupedData[bu][l07][item.month]) newGroupedData[bu][l07][item.month] = {};
 
-            let durationVal = parseFloat(String(row[durationColIdx] ?? "").replace(/,/g, ""));
-            if (isNaN(durationVal)) durationVal = 0;
-            const calculatedSalary = durationVal * 24 * 20000;
+            const durationHours = parseDurationToHours(row[durationColIdx]);
+            const calculatedSalary = durationHours * 20000;
             if (calculatedSalary === 0) continue;
 
             const typeVal = String(row[typeColIdx] ?? "").trim().toUpperCase() || "UNSPECIFIED";
@@ -1567,7 +1565,7 @@ export function PivotSheet() {
                     className="w-full bg-amber-50 border border-amber-400 font-mono text-slate-900 text-xs px-1.5 py-0.5 rounded outline-none focus:ring-1 focus:ring-amber-500 text-right"
                   />
                 ) : (
-                  <span>{val ? val.toLocaleString("en-US") : "0"}</span>
+                  <span>{val ? formatNumber(val) : "0"}</span>
                 )}
               </td>
             );
@@ -1577,7 +1575,7 @@ export function PivotSheet() {
               style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
               className="py-2 px-3 text-right border-b border-[#e7dbdc] font-mono font-bold text-slate-900 text-xs bg-amber-50/30"
             >
-              {item.rowTotal ? item.rowTotal.toLocaleString("en-US") : "0"}
+              {item.rowTotal ? formatNumber(item.rowTotal) : "0"}
             </td>
           )}
         </tr>
@@ -1941,7 +1939,7 @@ export function PivotSheet() {
                         style={{ width: w, minWidth: w, maxWidth: w }}
                         className="py-2.5 px-2.5 text-right border-r border-[#e7dbdc] font-mono font-bold text-amber-950 text-xs"
                       >
-                        {v ? v.toLocaleString("en-US") : "0"}
+                        {v ? formatNumber(v) : "0"}
                       </td>
                     );
                   })}
@@ -1950,7 +1948,7 @@ export function PivotSheet() {
                       style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
                       className="py-2.5 px-3 text-right font-mono font-extrabold text-amber-950 text-xs bg-amber-200/60"
                     >
-                      {superGrandTotal ? superGrandTotal.toLocaleString("en-US") : "0"}
+                      {superGrandTotal ? formatNumber(superGrandTotal) : "0"}
                     </td>
                   )}
                 </tr>

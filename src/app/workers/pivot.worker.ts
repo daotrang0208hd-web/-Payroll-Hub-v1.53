@@ -6,6 +6,8 @@ import {
 } from "../lib/utils/master-sheet-utils";
 import { buildPivotFromAppData } from "../lib/utils/pivot-utils";
 import { resolveMktRosterCenter } from "../lib/utils/center-utils";
+import { parseDurationToHours } from "../lib/schemas/excel-schema";
+import { parseMoneyToNumber } from "../lib/utils/data-utils";
 
 function extractBankName(filename: string, fallbackBank?: string): string {
   const upper = filename.toUpperCase();
@@ -64,14 +66,6 @@ const L07_TO_BU_MAP: Record<string, string> = {
   "TH0001.TPU": "ATH", "TN0001.LNQ": "ATN", "PT0001.HVG": "APT",
   "NTW": "NTW", "Hai Phong": "APH"
 };
-
-function parseMoneyToNumber(val: any): number {
-  if (typeof val === "number") return val;
-  if (!val) return 0;
-  const str = String(val).replace(/,/g, "").trim();
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
-}
 
 function processTimesheetMktLogic(row: any) {
   const resolved = resolveMktRosterCenter(row.chargetocenterCode);
@@ -226,15 +220,8 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
             const rawCenter = row[centerColIdx] || "";
             const rawDuration = row[durationColIdx];
             
-            let durationVal = 0;
-            if (typeof rawDuration === 'number') {
-              durationVal = rawDuration;
-            } else if (typeof rawDuration === 'string') {
-              durationVal = parseFloat(rawDuration.replace(/,/g, ''));
-              if (isNaN(durationVal)) durationVal = 0;
-            }
-
-            const calculatedSalary = durationVal * 24 * 20000;
+            const durationHours = parseDurationToHours(rawDuration);
+            const calculatedSalary = durationHours * 20000;
             if (calculatedSalary === 0) continue;
 
             const mapped = processTimesheetMktLogic({ chargetocenterCode: String(rawCenter) });

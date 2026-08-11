@@ -11,6 +11,17 @@ export function parseMoneyToNumber(val: any): number {
   const source = String(val).trim();
   if (!source) return 0;
 
+  // Dates returned by the Excel worker are serialized to ISO strings. They
+  // must never be stripped down to digits and treated as payroll amounts.
+  if (
+    /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)?$/i.test(
+      source,
+    ) ||
+    /^\d{1,2}[/-]\d{1,2}[/-]\d{4}$/.test(source)
+  ) {
+    return 0;
+  }
+
   // Preserve scientific notation when Excel/browser already supplied it.
   if (/^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(source)) {
     const scientificValue = Number(source);

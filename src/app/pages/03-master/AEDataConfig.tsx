@@ -1158,7 +1158,10 @@ export function AEDataConfig({
               const isSheetOneSheet =
                 isSheetOneMasterSheetName(sheetName) || detectedSheetKind === "sheet1";
 
-              if (isRosterSheet) {
+              // Roster/Q_Roster belongs only to the MKT Local input. A Gross
+              // Pay workbook may contain another sheet with a similar name;
+              // it must not change the original Sheet 1 processing path.
+              if (isMktFile && isRosterSheet) {
                 detectedMktTargetIds.add(item.id);
                 let headerRowIndex = -1;
                 for (let r = 0; r < Math.min(30, rows.length); r++) {

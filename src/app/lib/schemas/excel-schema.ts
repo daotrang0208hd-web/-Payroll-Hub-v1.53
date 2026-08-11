@@ -20,12 +20,7 @@ export const ExcelRowSchema = z.object({
    * Duration in hours or Excel fractional day value
    */
   duration: z.preprocess(
-    (val) => {
-      if (val === null || val === undefined || val === "") return 0;
-      if (typeof val === "number") return val;
-      const parsed = parseFloat(String(val).replace(/,/g, "."));
-      return isNaN(parsed) ? 0 : parsed;
-    },
+    (val) => parseDurationToHours(val),
     z.number({
       invalid_type_error: "Duration phải là số",
     }).min(0, "Duration không được âm")
@@ -56,6 +51,37 @@ export const ExcelRowSchema = z.object({
 });
 
 export type ValidatedExcelRow = z.infer<typeof ExcelRowSchema>;
+
+const MAX_ROSTER_DURATION_HOURS = 24 * 7;
+const EXCEL_LOCAL_EPOCH_MS = new Date(1899, 11, 30, 0, 0, 0, 0).getTime();
+const EXCEL_ISO_DATE_PATTERN =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/i;
+
+function normalizeDurationHours(hours: number): number {
+  return Number.isFinite(hours) &&
+    hours > 0 &&
+    hours <= MAX_ROSTER_DURATION_HOURS
+    ? hours
+    : 0;
+}
+
+function parseExcelEpochDuration(value: Date | string): number | null {
+  if (
+    typeof value === "string" &&
+    !EXCEL_ISO_DATE_PATTERN.test(value.trim())
+  ) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+
+  // SheetJS creates Date values with local wall-clock fields. Comparing with
+  // the local Excel epoch also survives historical timezone offsets after the
+  // worker value has been converted to/from an ISO string.
+  const hours = (date.getTime() - EXCEL_LOCAL_EPOCH_MS) / 3_600_000;
+  return normalizeDurationHours(hours);
+}
 
 /**
  * Utility to strip Vietnamese diacritics / accents
@@ -372,38 +398,63 @@ export function validateExcelDataset(
 
 /**
  * Helper to parse Duration value to hours (handles Excel fractional day, HH:MM format, and numeric hours)
- * Formula for Master/Pivot: Duration * 24 * 20000
+ * Returns hours. Excel fractional-day values are converted with `* 24` once;
+ * callers then multiply the returned hours by the payroll rate.
  */
 export function parseDurationToHours(rawDuration: any): number {
   if (rawDuration === null || rawDuration === undefined || rawDuration === "") return 0;
+
+  // With `cellDates: true`, SheetJS converts an Excel time-formatted value
+  // (for example 0.083333 = 02:00) to a Date around Excel's 1899-12-30
+  // epoch. The Master worker serializes its payload as JSON, so the same value
+  // can also arrive here as an ISO string. Reading that string with parseFloat
+  // returns 1899 and inflates Pivot salary hundreds of times.
+  if (rawDuration instanceof Date) {
+    return parseExcelEpochDuration(rawDuration) ?? 0;
+  }
   
   if (typeof rawDuration === "number") {
-    if (isNaN(rawDuration) || rawDuration <= 0) return 0;
+    if (!Number.isFinite(rawDuration) || rawDuration <= 0) return 0;
     // If Excel fractional day (0 < duration < 1, e.g. 0.208333333 = 5h), convert to hours (* 24)
-    return rawDuration > 0 && rawDuration < 1 ? rawDuration * 24 : rawDuration;
+    return normalizeDurationHours(
+      rawDuration > 0 && rawDuration < 1
+        ? rawDuration * 24
+        : rawDuration,
+    );
   }
 
-  const str = String(rawDuration).trim().replace(",", ".");
+  const rawString = String(rawDuration).trim();
+  const excelEpochHours = parseExcelEpochDuration(rawString);
+  if (excelEpochHours !== null) return excelEpochHours;
+
+  // A calendar date is not a duration. Reject it before any numeric parsing,
+  // otherwise values such as 2026-01-15 would become 2026 hours.
+  if (/^\d{4}-\d{2}-\d{2}(?:[T\s].*)?$/.test(rawString)) return 0;
+
+  const str = rawString.replace(/,/g, ".");
   if (!str) return 0;
 
-  if (str.includes(":")) {
-    const parts = str.split(":");
-    const h = parseFloat(parts[0]) || 0;
-    const m = parseFloat(parts[1]) || 0;
-    const s = parseFloat(parts[2] || "0") || 0;
-    return h + m / 60 + s / 3600;
+  const timeMatch = str.match(
+    /^(\d{1,3}):([0-5]?\d)(?::([0-5]?\d(?:\.\d+)?))?$/,
+  );
+  if (timeMatch) {
+    const h = Number(timeMatch[1]) || 0;
+    const m = Number(timeMatch[2]) || 0;
+    const s = Number(timeMatch[3] || "0") || 0;
+    return normalizeDurationHours(h + m / 60 + s / 3600);
   }
 
-  const num = parseFloat(str);
-  if (isNaN(num) || num <= 0) return 0;
+  if (!/^[+-]?\d+(?:\.\d+)?$/.test(str)) return 0;
+  const num = Number(str);
+  if (!Number.isFinite(num) || num <= 0) return 0;
 
-  return num > 0 && num < 1 ? num * 24 : num;
+  return normalizeDurationHours(num > 0 && num < 1 ? num * 24 : num);
 }
 
 /**
  * Calculates row amount with support for:
  * 1. Direct Payment/Amount/Salary column if provided in row
- * 2. Standard Master/Pivot formula: Duration * 24 * 20000 (Duration in HH:MM or fractional day)
+ * 2. Standard Master/Pivot formula: duration hours * rate
  */
 export function calculateRowAmount(row: Record<string, any> | ValidatedExcelRow, defaultRate = 20000): number {
   const rawObj = row as Record<string, any>;
