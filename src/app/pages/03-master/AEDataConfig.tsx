@@ -866,7 +866,7 @@ export function AEDataConfig({
       toast.error("Vui lòng chọn ít nhất một File AE Final!");
       return;
     }
-    const hasNonMktTargets = targets.some(
+    let hasNonMktTargets = targets.some(
       (target) => !isMktMasterInput(target),
     );
 
@@ -951,6 +951,7 @@ export function AEDataConfig({
       const holdData: any[] = [];
       const soSanhAeData: any[] = [];
       const rosterDataToAppend: any[] = [];
+      const detectedMktTargetIds = new Set<string>();
       const statusById = new Map<string, string>();
       const sheet1Headers = [
         "No.",
@@ -1031,7 +1032,8 @@ export function AEDataConfig({
               const isHoldSheet = isHoldMasterSheetName(sheetName);
               const isSheetOneSheet = isSheetOneMasterSheetName(sheetName);
 
-              if (isMktFile && isRosterSheet) {
+              if (isRosterSheet) {
+                detectedMktTargetIds.add(item.id);
                 let headerRowIndex = -1;
                 for (let r = 0; r < Math.min(30, rows.length); r++) {
                   const rowStr = rows[r]
@@ -1132,6 +1134,8 @@ export function AEDataConfig({
                     gio_ra,
                     duration,
                     DURATION: duration,
+                    calculatedSalary: duration * 20000,
+                    _durationUnit: "hours",
                     notes,
                     chargeToCenterMkt,
                     chargeToCenterCode: rawCenterForL07,
@@ -2051,8 +2055,8 @@ export function AEDataConfig({
                       }
 
                       // Sheet 1 / Gross Pay MKT mapping has priority over the
-                      // generic Center resolver. Pivot Master uses a separate
-                      // processing path and is not changed by this rule.
+                      // generic Center resolver. These processed L07/Business
+                      // values are sent to Pivot Master in the same run.
                       if (northMktL07) {
                         l07 = northMktL07;
                         business = getBusinessFromL07(northMktL07);
@@ -2132,6 +2136,12 @@ export function AEDataConfig({
 
       setProcessingMessage("Đang tổng hợp và khử trùng dữ liệu...");
       await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const isProcessedMktTarget = (target: AERow) =>
+        isMktMasterInput(target) || detectedMktTargetIds.has(target.id);
+      hasNonMktTargets = targets.some(
+        (target) => !isProcessedMktTarget(target),
+      );
 
       const finalSheet1Data: any[] = [];
       const seenSheet1Keys = new Set();
@@ -2339,14 +2349,14 @@ export function AEDataConfig({
         String(value || "").trim().toUpperCase();
       const refreshedRosterFiles = new Set(
         targets
-          .filter(isMktMasterInput)
+          .filter(isProcessedMktTarget)
           .flatMap((target) => [target.name, target.fileObj?.name])
           .map(normalizeSourceFile)
           .filter(Boolean),
       );
       const refreshedSheet1FilesForPivot = new Set(
         targets
-          .filter((target) => !isMktMasterInput(target))
+          .filter((target) => !isProcessedMktTarget(target))
           .flatMap((target) => [target.name, target.fileObj?.name])
           .map(normalizeSourceFile)
           .filter(Boolean),

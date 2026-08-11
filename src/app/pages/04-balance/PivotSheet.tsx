@@ -901,28 +901,10 @@ export function PivotSheet() {
           const durationColIdx = headers.findIndex((h: any) => {
             if (!h) return false;
             const val = String(h).trim().toUpperCase();
-            return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ' || val === 'GIỜ' || val === 'CALCULATEDSALARY' || val === 'SALARY' || val === 'TOTAL PAYMENT' || val === 'AMOUNT' || val === 'TK_DURATION';
+            return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ' || val === 'GIỜ' || val === 'TK_DURATION' || val === 'TOTAL HOURS';
           });
 
-          if (centerColIdx === -1) continue;
-
-          // Check if sheet has individual charge columns
-          const chargeCols: { index: number; label: string }[] = [];
-          headers.forEach((h: any, idx: number) => {
-            if (!h) return;
-            const hStr = String(h).trim().toUpperCase();
-            if (hStr.includes('CHARGE') || hStr.startsWith('LDEC') || hStr.startsWith('LDEM') || hStr.startsWith('LPAR') || hStr.startsWith('LRET') || hStr.startsWith('MOTH') || hStr === 'MKT LOCAL') {
-              let label = hStr.replace(/^CHARGE\s+TO\s+/i, '').replace(/^CHARGE\s+/i, '').trim();
-              if (label === '') label = 'OTHER';
-              if (label.startsWith('LDEM')) label = 'LDEM01';
-              else if (label.startsWith('LRET')) label = 'LRET01';
-              else if (label.startsWith('LPAR')) label = 'LPAR01';
-              else if (label.startsWith('LDEC')) label = 'LDEC01';
-              else if (label.startsWith('MOTH')) label = 'MOTH01';
-              chargeCols.push({ index: idx, label });
-              uniqueTypes.add(label);
-            }
-          });
+          if (centerColIdx === -1 || typeColIdx === -1 || durationColIdx === -1) continue;
 
           for (let i = headerRowIdx + 1; i < jsonData.length; i++) {
             const row = jsonData[i];
@@ -938,39 +920,18 @@ export function PivotSheet() {
             if (!newGroupedData[bu][l07]) newGroupedData[bu][l07] = {};
             if (!newGroupedData[bu][l07][item.month]) newGroupedData[bu][l07][item.month] = {};
 
-            if (chargeCols.length > 0) {
-              chargeCols.forEach(col => {
-                const rawVal = row[col.index];
-                let val = parseFloat(rawVal);
-                if (isNaN(val)) val = 0;
-                if (!newGroupedData[bu][l07][item.month][col.label]) {
-                  newGroupedData[bu][l07][item.month][col.label] = 0;
-                }
-                newGroupedData[bu][l07][item.month][col.label] += val;
-              });
-            } else {
-              let durationVal = (durationColIdx !== -1) ? parseFloat(row[durationColIdx]) : 0;
-              if (isNaN(durationVal)) durationVal = 0;
-              const calculatedSalary = durationVal > 0 ? (durationVal < 50 ? durationVal * 24 * 20000 : durationVal) : 0;
+            let durationVal = parseFloat(String(row[durationColIdx] ?? "").replace(/,/g, ""));
+            if (isNaN(durationVal)) durationVal = 0;
+            const calculatedSalary = durationVal * 24 * 20000;
+            if (calculatedSalary === 0) continue;
 
-              let rawTypeVal = (typeColIdx !== -1 && row[typeColIdx]) ? String(row[typeColIdx]).trim().toUpperCase() : "MKT LOCAL";
-              if (rawTypeVal === "" || rawTypeVal === "N/A") rawTypeVal = "MKT LOCAL";
+            const typeVal = String(row[typeColIdx] ?? "").trim().toUpperCase() || "UNSPECIFIED";
+            uniqueTypes.add(typeVal);
 
-              let typeVal = rawTypeVal;
-              if (rawTypeVal.startsWith("LDEM")) typeVal = "LDEM01";
-              else if (rawTypeVal.startsWith("LRET")) typeVal = "LRET01";
-              else if (rawTypeVal.startsWith("LPAR")) typeVal = "LPAR01";
-              else if (rawTypeVal.startsWith("LDEC")) typeVal = "LDEC01";
-              else if (rawTypeVal.startsWith("MOTH")) typeVal = "MOTH01";
-              else if (rawTypeVal.includes("MKT")) typeVal = "MKT LOCAL";
-
-              uniqueTypes.add(typeVal);
-
-              if (!newGroupedData[bu][l07][item.month][typeVal]) {
-                newGroupedData[bu][l07][item.month][typeVal] = 0;
-              }
-              newGroupedData[bu][l07][item.month][typeVal] += calculatedSalary;
+            if (!newGroupedData[bu][l07][item.month][typeVal]) {
+              newGroupedData[bu][l07][item.month][typeVal] = 0;
             }
+            newGroupedData[bu][l07][item.month][typeVal] += calculatedSalary;
           }
         }
       } catch (err) {

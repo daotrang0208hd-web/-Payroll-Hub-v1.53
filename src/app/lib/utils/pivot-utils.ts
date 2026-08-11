@@ -82,7 +82,8 @@ export function sanitizePivotData(
 const KNOWN_NON_CHARGE_KEYS = new Set([
   "NO", "ID NUMBER", "FULL NAME", "BANK ACCOUNT NUMBER", "BANK NAME",
   "CITAD CODE", "TAX CODE", "CONTRACT NO", "TOTAL PAYMENT", "CENTER",
-  "BUSINESS", "BU", "L07", "_RAWAE", "THÁNG", "SALARY SCALE", "FROM", "TO", "TYPE"
+  "BUSINESS", "BU", "L07", "_RAWAE", "THÁNG", "SALARY SCALE", "FROM", "TO", "TYPE",
+  "CHARGE TO CENTER", "CHARGE TO CENTER CODE", "CHARGETOCENTERCODE"
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -150,10 +151,7 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     Object.keys(row).forEach((key) => {
       const uKey = key.toUpperCase().trim();
       if (KNOWN_NON_CHARGE_KEYS.has(uKey)) return;
-      if (
-        (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM")) &&
-        !uKey.includes("CHARGE")
-      ) return;
+      if (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM")) return;
 
       if (uKey.includes("CHARGE") || uKey.startsWith("LDEC") || uKey.startsWith("LDEM") || uKey.startsWith("LPAR") || uKey.startsWith("LRET") || uKey.startsWith("MOTH")) {
         const amt = parseMoney(row[key]);
@@ -181,11 +179,15 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     if (!row) return;
     const center = row["chargeToCenterCode"] || row["chargeToCenterMkt"] || row["CHARGE TO CENTER"] || row["Center"] || row["center"] || "";
     const duration = parseMoney(row["duration"] || row["DURATION"] || row["HOURS"] || 0);
-    const salary = duration > 0 ? duration * 24 * 20000 : parseMoney(row["calculatedSalary"] || row["TOTAL PAYMENT"] || row["TOTAL"] || row["totalPayment"] || 0);
+    const calculatedSalary = parseMoney(row["calculatedSalary"] || row["CALCULATED SALARY"] || 0);
+    const durationIsHours =
+      String(row["_durationUnit"] || row["durationUnit"] || "").toLowerCase() === "hours" ||
+      row["isMktLocal"] === true;
+    const salary = calculatedSalary || duration * (durationIsHours ? 20000 : 24 * 20000);
     const bu = row["bu"] || row["Business"] || "AHN";
     const l07 = row["l07"] || row["L07"] || center || "MKT LOCAL NORTH";
     const month = row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
-    const rowType = row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "MKT LOCAL";
+    const rowType = row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "UNSPECIFIED";
 
     if (salary > 0 && l07) {
       addAmount(bu, l07, month, rowType, salary);

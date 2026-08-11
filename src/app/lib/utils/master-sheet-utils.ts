@@ -220,11 +220,12 @@ export function isRelevantMasterSheetName(
   isMktFile: boolean,
 ): boolean {
   const normalizedName = normalizeMasterSheetName(sheetName);
+  // Roster/Q_roster is the authoritative MKT Local source. Detect it from
+  // the sheet itself because file names, bank labels and sheet order vary.
+  if (isRosterMasterSheetName(sheetName)) return true;
+
   if (isMktFile) {
-    return (
-      isRosterMasterSheetName(sheetName) ||
-      isBonusMasterSheetName(sheetName)
-    );
+    return isBonusMasterSheetName(sheetName);
   }
 
   return (
