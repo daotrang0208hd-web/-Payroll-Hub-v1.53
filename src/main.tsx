@@ -11,18 +11,54 @@ declare global {
   }
 }
 
-async function start() {
+const staticSupabaseConfig = {
+  url: import.meta.env.VITE_SUPABASE_URL || "",
+  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+};
+
+function isValidSupabaseConfig(config: { url?: string; anonKey?: string }) {
+  if (!config.url || !config.anonKey) return false;
   try {
-    const res = await fetch("/api/supabase-config");
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.url && data.anonKey) {
-        window.__SUPABASE_CONFIG__ = data;
-        console.log("[Supabase Config] Dynamic configuration loaded successfully.");
-      }
+    new URL(config.url);
+    return !config.url.includes("placeholder") && !config.anonKey.includes("placeholder");
+  } catch {
+    return false;
+  }
+}
+
+async function loadDynamicSupabaseConfig() {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const response = await fetch("/api/supabase-config", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok || !contentType.toLowerCase().includes("application/json")) {
+      return;
+    }
+
+    const data = await response.json();
+    if (isValidSupabaseConfig(data)) {
+      window.__SUPABASE_CONFIG__ = data;
     }
   } catch (err) {
-    console.warn("[Supabase Config] Failed to fetch dynamic configuration, falling back to static env:", err);
+    if (!(err instanceof DOMException && err.name === "AbortError")) {
+      console.warn("[Supabase Config] Không thể tải cấu hình động; đang dùng cấu hình build-time.");
+    }
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+function start() {
+  if (isValidSupabaseConfig(staticSupabaseConfig)) {
+    window.__SUPABASE_CONFIG__ = staticSupabaseConfig;
+  } else {
+    void loadDynamicSupabaseConfig();
   }
 
   createRoot(document.getElementById("root")!).render(<App />);

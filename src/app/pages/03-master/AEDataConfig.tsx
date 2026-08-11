@@ -159,13 +159,35 @@ function parseMasterFileInWorker(
   isMktFile: boolean,
   targetFields: string[],
   includeRows: boolean,
+  signal?: AbortSignal,
 ) {
   const requestId = crypto.randomUUID();
   const worker = new MasterImportWorker();
   return new Promise<MasterWorkbookPayload>((resolve, reject) => {
-    const finish = () => worker.terminate();
+    let settled = false;
+    const finish = () => {
+      signal?.removeEventListener("abort", handleAbort);
+      worker.terminate();
+    };
+    const handleAbort = () => {
+      if (settled) return;
+      settled = true;
+      finish();
+      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
+      error.name = "AbortError";
+      reject(error);
+    };
+
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
+    signal?.addEventListener("abort", handleAbort, { once: true });
+
     worker.onmessage = (event: MessageEvent) => {
       if (String(event.data?.requestId || "") !== requestId) return;
+      if (settled) return;
+      settled = true;
       finish();
       if (event.data?.success) {
         let parsedResult = event.data.result;
@@ -184,6 +206,8 @@ function parseMasterFileInWorker(
       }
     };
     worker.onerror = (event) => {
+      if (settled) return;
+      settled = true;
       finish();
       reject(
         new Error(
@@ -201,10 +225,29 @@ function parseMasterFileInWorker(
   });
 }
 
-const LARGE_LOOP_YIELD_INTERVAL = 750;
+const LARGE_LOOP_YIELD_INTERVAL = 200;
 
-function yieldToBrowser(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+function yieldToBrowser(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
+      error.name = "AbortError";
+      reject(error);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      signal?.removeEventListener("abort", handleAbort);
+      resolve();
+    }, 0);
+    const handleAbort = () => {
+      window.clearTimeout(timeoutId);
+      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
+      error.name = "AbortError";
+      reject(error);
+    };
+    signal?.addEventListener("abort", handleAbort, { once: true });
+  });
 }
 
 
@@ -231,6 +274,7 @@ export function AEDataConfig({
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingProcessingIdsRef = useRef<string[]>([]);
+  const processingAbortRef = useRef<AbortController | null>(null);
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [choices, setChoices] = useState<
     { file: File; action: "update" | "new" | "skip"; targetId?: string }[]
@@ -256,6 +300,13 @@ export function AEDataConfig({
       })),
     );
   }, [pendingUploads]);
+
+  useEffect(() => {
+    return () => {
+      processingAbortRef.current?.abort();
+      processingAbortRef.current = null;
+    };
+  }, []);
 
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -539,6 +590,10 @@ export function AEDataConfig({
       return;
     }
 
+    processingAbortRef.current?.abort();
+    const uploadController = new AbortController();
+    processingAbortRef.current = uploadController;
+
     setIsProcessing(true);
     setProcessingMessage("Đang tự động map cột...");
     updateAppData(
@@ -557,6 +612,7 @@ export function AEDataConfig({
         guessedBank === "MKT LOCAL NORTH",
         masterAeFields,
         false,
+        uploadController.signal,
       );
       pendingProcessingIdsRef.current = [
         ...pendingProcessingIdsRef.current.filter(
@@ -586,6 +642,9 @@ export function AEDataConfig({
       }), false);
       toast.success(`Đã tải lên và tự động map cột cho file: ${file.name}`);
     } catch (error: any) {
+      if (error?.name === "AbortError" || uploadController.signal.aborted) {
+        return;
+      }
       const errorMessage = error?.message || String(error);
       updateAppData(
         (prev) => ({
@@ -600,7 +659,10 @@ export function AEDataConfig({
       );
       toast.error(`Lỗi đọc ${file.name}: ${errorMessage}`);
     } finally {
-      setIsProcessing(false);
+      if (processingAbortRef.current === uploadController) {
+        processingAbortRef.current = null;
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -748,6 +810,10 @@ export function AEDataConfig({
     }[] = [];
     const queuedIds: string[] = [];
 
+    processingAbortRef.current?.abort();
+    const uploadController = new AbortController();
+    processingAbortRef.current = uploadController;
+
     setIsProcessing(true);
     setProcessingMessage("Đang tự động map cột...");
 
@@ -788,9 +854,17 @@ export function AEDataConfig({
           guessedBank === "MKT LOCAL NORTH",
           masterAeFields,
           false,
+          uploadController.signal,
         );
         queuedIds.push(id);
       } catch (error: any) {
+        if (error?.name === "AbortError" || uploadController.signal.aborted) {
+          if (processingAbortRef.current === uploadController) {
+            processingAbortRef.current = null;
+            setIsProcessing(false);
+          }
+          return;
+        }
         status = `Error: ${error?.message || String(error)}`;
       }
 
@@ -846,7 +920,10 @@ export function AEDataConfig({
     setChoices([]);
     setProgress(0);
     setProcessingMessage("");
-    setIsProcessing(false);
+    if (processingAbortRef.current === uploadController) {
+      processingAbortRef.current = null;
+      setIsProcessing(false);
+    }
 
     if (queuedIds.length === 0) {
       toast.error("Không có file hợp lệ để xử lý.");
@@ -959,6 +1036,11 @@ export function AEDataConfig({
       return -1;
     };
 
+    processingAbortRef.current?.abort();
+    const processingController = new AbortController();
+    processingAbortRef.current = processingController;
+    const processingSignal = processingController.signal;
+
     setIsProcessing(true);
     setProgress(0);
     setProcessingMessage("Đang chuẩn bị xử lý dữ liệu AE...");
@@ -1030,7 +1112,9 @@ export function AEDataConfig({
             isMktFile,
             masterAeFields,
             true,
+            processingSignal,
           );
+          await yieldToBrowser(processingSignal);
           const itemColumnMapping =
             item.columnMapping && Object.keys(item.columnMapping).length > 0
               ? item.columnMapping
@@ -1118,7 +1202,7 @@ export function AEDataConfig({
                     r > headerRowIndex + 1 &&
                     (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
                   ) {
-                    await yieldToBrowser();
+                    await yieldToBrowser(processingSignal);
                   }
                   const row = rows[r];
                   if (!row || row.every((cell) => cell === "")) continue;
@@ -1269,7 +1353,7 @@ export function AEDataConfig({
                       r > headerRowIndex + 1 &&
                       (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
                     ) {
-                      await yieldToBrowser();
+                      await yieldToBrowser(processingSignal);
                     }
                     const row = rows[r];
                     if (!row || row.every((cell) => cell === "")) continue;
@@ -1415,7 +1499,7 @@ export function AEDataConfig({
                       r > headerRowIndex + 1 &&
                       (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
                     ) {
-                      await yieldToBrowser();
+                      await yieldToBrowser(processingSignal);
                     }
                     const row = rows[r];
                     if (!row || row.every(cell => cell === "")) continue;
@@ -1631,7 +1715,7 @@ export function AEDataConfig({
                       r > headerRowIndex + 1 &&
                       (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
                     ) {
-                      await yieldToBrowser();
+                      await yieldToBrowser(processingSignal);
                     }
                     const row = rows[r];
                     if (!row || row.length < 3) continue;
@@ -1764,7 +1848,7 @@ export function AEDataConfig({
                       r > 0 &&
                       r % LARGE_LOOP_YIELD_INTERVAL === 0
                     ) {
-                      await yieldToBrowser();
+                      await yieldToBrowser(processingSignal);
                     }
                     const row = rows[r];
                     if (!row || row.length === 0) continue;
@@ -1966,7 +2050,7 @@ export function AEDataConfig({
                       r > headerRowIndex + 1 &&
                       (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
                     ) {
-                      await yieldToBrowser();
+                      await yieldToBrowser(processingSignal);
                     }
                     const row = rows[r];
                     // const idxTP = colIndices["TOTAL PAYMENT"];
@@ -2112,7 +2196,7 @@ export function AEDataConfig({
                 sheetProcessed = true;
                 for (let r = 1; r < rows.length; r++) {
                   if (r % LARGE_LOOP_YIELD_INTERVAL === 0) {
-                    await yieldToBrowser();
+                    await yieldToBrowser(processingSignal);
                   }
                   const row = rows[r];
                   soSanhAeData.push({
@@ -2127,6 +2211,9 @@ export function AEDataConfig({
 
               if (sheetProcessed) fileProcessedSuccessfully = true;
             } catch (sheetError: any) {
+              if (sheetError?.name === "AbortError" || processingSignal.aborted) {
+                throw sheetError;
+              }
               console.error(
                 `Lỗi xử lý sheet ${sheetName} trong file ${item.name}:`,
                 sheetError,
@@ -2144,6 +2231,9 @@ export function AEDataConfig({
             );
           }
         } catch (e: any) {
+          if (e?.name === "AbortError" || processingSignal.aborted) {
+            throw e;
+          }
           statusById.set(item.id, `Error: ${e.message}`);
         }
       }
@@ -2648,6 +2738,8 @@ export function AEDataConfig({
         };
       }, false);
 
+      await yieldToBrowser(processingSignal);
+
       // Đồng bộ Pivot từ dữ liệu đã xử lý. Không đọc và parse lại toàn bộ file Excel.
       try {
         const pivotSheet1Rows = mergeSheet1RowsForPivot(
@@ -2659,8 +2751,24 @@ export function AEDataConfig({
           const PivotWorker = (await import("../../workers/pivot.worker?worker")).default;
           pivotResult = await new Promise((resolve, reject) => {
             const worker = new PivotWorker();
-            worker.onmessage = (e: any) => {
+            let settled = false;
+            const cleanup = () => {
+              processingSignal.removeEventListener("abort", handleAbort);
               worker.terminate();
+            };
+            const handleAbort = () => {
+              if (settled) return;
+              settled = true;
+              cleanup();
+              const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
+              error.name = "AbortError";
+              reject(error);
+            };
+            processingSignal.addEventListener("abort", handleAbort, { once: true });
+            worker.onmessage = (e: any) => {
+              if (settled) return;
+              settled = true;
+              cleanup();
               if (e.data.success) {
                 resolve({
                   ...e.data.result,
@@ -2671,7 +2779,9 @@ export function AEDataConfig({
               }
             };
             worker.onerror = (err) => {
-              worker.terminate();
+              if (settled) return;
+              settled = true;
+              cleanup();
               reject(err);
             };
             worker.postMessage({
@@ -2680,9 +2790,11 @@ export function AEDataConfig({
             });
           });
         } catch (workerError) {
+          if (processingSignal.aborted) throw workerError;
           console.warn("Lỗi worker pivot, chuyển sang fallback:", workerError);
         }
 
+        await yieldToBrowser(processingSignal);
         if (!pivotResult || !pivotResult.groupedData || Object.keys(pivotResult.groupedData).length === 0) {
           const fallback = buildPivotFromAppData(
             pivotSheet1Rows,
@@ -2698,6 +2810,7 @@ export function AEDataConfig({
         }
 
         if (pivotResult && pivotResult.groupedData) {
+          await yieldToBrowser(processingSignal);
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
             groupedData: pivotResult.groupedData,
             typeColumns: pivotResult.typeColumns,
@@ -2715,6 +2828,7 @@ export function AEDataConfig({
           }));
         }
       } catch (pivotErr) {
+        if (processingSignal.aborted) throw pivotErr;
         console.error("Error creating pivot master data:", pivotErr);
       }
 
@@ -2740,10 +2854,16 @@ export function AEDataConfig({
         navigate("/master-ae");
       }
     } catch (error: any) {
+      if (error?.name === "AbortError" || processingSignal.aborted) {
+        return;
+      }
       console.error("Error processing AE data:", error);
       toast.error("Lỗi xử lý file: " + error.message);
     } finally {
-      setIsProcessing(false);
+      if (processingAbortRef.current === processingController) {
+        processingAbortRef.current = null;
+        setIsProcessing(false);
+      }
     }
   };
 
