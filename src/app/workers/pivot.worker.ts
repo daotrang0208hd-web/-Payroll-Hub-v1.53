@@ -215,6 +215,11 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
           const val = String(h).trim().toUpperCase();
           return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ';
         });
+        const typeColIdx = headers.findIndex((h: any) => {
+          if (!h) return false;
+          const val = String(h).trim().toUpperCase();
+          return val === 'TYPE' || val === 'LOẠI' || val === 'PHÂN LOẠI';
+        });
 
         if (centerColIdx !== -1 && durationColIdx !== -1) {
           for (let r = headerRowIdx + 1; r < jsonData.length; r++) {
@@ -238,7 +243,9 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
             const mapped = processTimesheetMktLogic({ chargetocenterCode: String(rawCenter) });
             const finalL07 = mapped.l07 || rawCenter;
             const finalBU = mapped.bu || "AHN";
-            const finalType = "MKT LOCAL";
+            const rawType = typeColIdx !== -1 ? row[typeColIdx] : "";
+            const finalType =
+              String(rawType || "").trim().toUpperCase() || "UNSPECIFIED";
 
             uniqueTypes.add(finalType);
 

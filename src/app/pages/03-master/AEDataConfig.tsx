@@ -2334,6 +2334,68 @@ export function AEDataConfig({
         return tp !== 0 || hasAcc;
       });
       const verifiedHoldData = finalHoldData;
+
+      const normalizeSourceFile = (value: unknown) =>
+        String(value || "").trim().toUpperCase();
+      const refreshedRosterFiles = new Set(
+        targets
+          .filter(isMktMasterInput)
+          .flatMap((target) => [target.name, target.fileObj?.name])
+          .map(normalizeSourceFile)
+          .filter(Boolean),
+      );
+      const refreshedSheet1FilesForPivot = new Set(
+        targets
+          .filter((target) => !isMktMasterInput(target))
+          .flatMap((target) => [target.name, target.fileObj?.name])
+          .map(normalizeSourceFile)
+          .filter(Boolean),
+      );
+
+      const mergeRosterRows = (existingRows: any[] = []) => {
+        const retainedRows = existingRows.filter((row) => {
+          const sourceFile = normalizeSourceFile(
+            row?._sourceFile || row?.["TÊN FILE"],
+          );
+          const rowId = String(row?._rowId || "").trim().toLowerCase();
+          if (sourceFile === "MOCK_ROSTER.XLSX" || rowId.startsWith("mock-row-")) {
+            return false;
+          }
+          return !sourceFile || !refreshedRosterFiles.has(sourceFile);
+        });
+        return [...retainedRows, ...rosterDataToAppend];
+      };
+
+      const mergeSheet1RowsForPivot = (existingRows: any[] = []) => {
+        const rowsByKey = new Map<string, any>();
+        const currentMonth = appData.globalMonth || "03.2026";
+        const getRowKey = (row: any) => {
+          const id = String(row?.["ID Number"] || "").trim().toUpperCase();
+          const fullName = String(row?.["Full name"] || "").trim().toUpperCase();
+          const l07 = String(row?.["L07"] || "").trim().toUpperCase();
+          const month = normalizeMonth(
+            row?.["Tháng báo cáo"] || row?._fileMonth || currentMonth,
+          );
+          const total = Math.round(
+            parseMoneyToNumber(row?.["TOTAL PAYMENT"] || 0),
+          );
+          return `${id}|${fullName}|${l07}|${month}|${total}`;
+        };
+
+        existingRows.forEach((row) => {
+          if (!row) return;
+          const sourceFile = normalizeSourceFile(
+            row["TÊN FILE"] || row._sourceFile,
+          );
+          if (sourceFile && refreshedSheet1FilesForPivot.has(sourceFile)) return;
+          rowsByKey.set(getRowKey(row), row);
+        });
+        verifiedSheet1Data.forEach((row) => {
+          if (row) rowsByKey.set(getRowKey(row), row);
+        });
+        return Array.from(rowsByKey.values());
+      };
+
       // Cập nhật map BU, L07 từ Sheet 1 cho Hold Data
       verifiedHoldData.filter(Boolean).forEach((row) => {
         const id = row["ID Number"];
@@ -2356,6 +2418,7 @@ export function AEDataConfig({
           return {
             ...prev,
             Ae_Global_Inputs: nextInputRows,
+            Q_Roster: mergeRosterRows(prev.Q_Roster || []),
           };
         }
 
@@ -2488,6 +2551,7 @@ export function AEDataConfig({
         return {
           ...prev,
           Ae_Global_Inputs: nextInputRows,
+          Q_Roster: mergeRosterRows(prev.Q_Roster || []),
           Bank_North_AE: hasNonMktTargets
             ? {
                 headers: [
@@ -2545,6 +2609,10 @@ export function AEDataConfig({
 
       // Đồng bộ Pivot từ dữ liệu đã xử lý. Không đọc và parse lại toàn bộ file Excel.
       try {
+        const pivotSheet1Rows = mergeSheet1RowsForPivot(
+          appData.Sheet1_AE?.data || [],
+        );
+        const pivotRosterRows = mergeRosterRows(appData.Q_Roster || []);
         let pivotResult: any = null;
         try {
           const PivotWorker = (await import("../../workers/pivot.worker?worker")).default;
@@ -2566,8 +2634,8 @@ export function AEDataConfig({
               reject(err);
             };
             worker.postMessage({
-              processedSheet1Rows: verifiedSheet1Data,
-              processedRosterRows: rosterDataToAppend,
+              processedSheet1Rows: pivotSheet1Rows,
+              processedRosterRows: pivotRosterRows,
             });
           });
         } catch (workerError) {
@@ -2575,12 +2643,16 @@ export function AEDataConfig({
         }
 
         if (!pivotResult || !pivotResult.groupedData || Object.keys(pivotResult.groupedData).length === 0) {
-          const fallback = buildPivotFromAppData(verifiedSheet1Data, [], rosterDataToAppend);
+          const fallback = buildPivotFromAppData(
+            pivotSheet1Rows,
+            [],
+            pivotRosterRows,
+          );
           pivotResult = {
             groupedData: fallback.groupedData,
             typeColumns: fallback.typeColumns,
             logs: [],
-            sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng dữ liệu Sheet 1`
+            sourceInfo: `Đồng bộ từ ${pivotSheet1Rows.length} dòng Gross Pay và ${pivotRosterRows.length} dòng MKT Local`
           };
         }
 

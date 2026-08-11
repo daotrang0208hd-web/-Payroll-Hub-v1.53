@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { getBusinessFromL07, mapL07 } from "./center-utils";
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -132,19 +133,27 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
 
   sheet1Rows.forEach((row) => {
     if (!row) return;
-    const bu = row["Business"] || row["BU"] || "";
-    const l07 = row["L07"] || row["Center"] || row["CHARGE TO CENTER"] || "";
+    const rawCenter =
+      row["Center"] ||
+      row["CENTER"] ||
+      row["CHARGE TO CENTER"] ||
+      row["Charge to Center"] ||
+      "";
+    const mappedCenterL07 = rawCenter ? mapL07(String(rawCenter)) : "";
+    const l07 = row["L07"] || mappedCenterL07 || rawCenter || "";
+    const bu = row["Business"] || row["BU"] || getBusinessFromL07(l07);
     const month = row["Tháng báo cáo"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     if (!l07) return;
-
-    const centerHasMkt = String(l07).toUpperCase().includes("MKT");
 
     // Check if row contains individual charge columns
     let processedChargeCols = false;
     Object.keys(row).forEach((key) => {
       const uKey = key.toUpperCase().trim();
       if (KNOWN_NON_CHARGE_KEYS.has(uKey)) return;
-      if (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM")) return;
+      if (
+        (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM")) &&
+        !uKey.includes("CHARGE")
+      ) return;
 
       if (uKey.includes("CHARGE") || uKey.startsWith("LDEC") || uKey.startsWith("LDEM") || uKey.startsWith("LPAR") || uKey.startsWith("LRET") || uKey.startsWith("MOTH")) {
         const amt = parseMoney(row[key]);
