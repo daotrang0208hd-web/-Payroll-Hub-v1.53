@@ -5,7 +5,10 @@ import {
   getExcelFileBuffer,
   scoreMatch,
 } from "../lib/utils/data-utils";
-import { isRelevantMasterSheetName } from "../lib/utils/master-sheet-utils";
+import {
+  detectMasterSheetKind,
+  isRelevantMasterSheetName,
+} from "../lib/utils/master-sheet-utils";
 
 export interface MasterSheetPayload {
   sheetName: string;
@@ -108,10 +111,6 @@ export async function parseMasterWorkbook(
         dense: true,
       });
 
-  const relevantSheetNames = workbook.SheetNames.filter((sheetName) =>
-    isRelevantMasterSheetName(sheetName, isMktFile),
-  );
-
   const readRows = (sheetName: string, maxRows?: number) => {
     const worksheet = workbook.Sheets[sheetName];
     const ref = worksheet?.["!ref"];
@@ -130,12 +129,22 @@ export async function parseMasterWorkbook(
     });
   };
 
+  const headerSamples = new Map(
+    workbook.SheetNames.map((sheetName) => [sheetName, readRows(sheetName, 50)]),
+  );
+  const relevantSheetNames = workbook.SheetNames.filter(
+    (sheetName) =>
+      isRelevantMasterSheetName(sheetName, isMktFile) ||
+      detectMasterSheetKind(sheetName, headerSamples.get(sheetName) || []) !==
+        "unknown",
+  );
+
   // Mapping only needs the header area. Returning every row while the user is
   // merely confirming many files duplicates all workbook data in main-thread
   // memory and can make the tab crash.
   const mappingSheets = relevantSheetNames.map((sheetName) => ({
     sheetName,
-    rows: readRows(sheetName, 50),
+    rows: headerSamples.get(sheetName) || [],
   }));
   const sheets = includeRows
     ? relevantSheetNames.map((sheetName) => ({

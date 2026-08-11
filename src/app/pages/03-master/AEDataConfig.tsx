@@ -33,6 +33,7 @@ import {
   formatIdNumber,
 } from "../../lib/utils/data-utils";
 import {
+  detectMasterSheetKind,
   findBonusAmountColumn,
   findBonusMasterHeaderRow,
   isBankMasterSheetName,
@@ -540,6 +541,15 @@ export function AEDataConfig({
 
     setIsProcessing(true);
     setProcessingMessage("Đang tự động map cột...");
+    updateAppData(
+      (prev) => ({
+        ...prev,
+        Ae_Global_Inputs: prev.Ae_Global_Inputs.map((row) =>
+          row.id === id ? { ...row, status: "processing" } : row,
+        ),
+      }),
+      false,
+    );
     try {
       const guessedBank = guessBank(file.name);
       const parsed = await parseMasterFileInWorker(
@@ -576,7 +586,19 @@ export function AEDataConfig({
       }), false);
       toast.success(`Đã tải lên và tự động map cột cho file: ${file.name}`);
     } catch (error: any) {
-      toast.error(`Lỗi đọc ${file.name}: ${error?.message || String(error)}`);
+      const errorMessage = error?.message || String(error);
+      updateAppData(
+        (prev) => ({
+          ...prev,
+          Ae_Global_Inputs: prev.Ae_Global_Inputs.map((row) =>
+            row.id === id
+              ? { ...row, status: `Error: ${errorMessage}` }
+              : row,
+          ),
+        }),
+        false,
+      );
+      toast.error(`Lỗi đọc ${file.name}: ${errorMessage}`);
     } finally {
       setIsProcessing(false);
     }
@@ -1027,10 +1049,15 @@ export function AEDataConfig({
               const normalizedSheetName = normalizeMasterSheetName(sheetName);
               let sheetProcessed = false;
 
-              const isRosterSheet = isRosterMasterSheetName(sheetName);
-              const isBankSheet = isBankMasterSheetName(sheetName);
-              const isHoldSheet = isHoldMasterSheetName(sheetName);
-              const isSheetOneSheet = isSheetOneMasterSheetName(sheetName);
+              const detectedSheetKind = detectMasterSheetKind(sheetName, rows);
+              const isRosterSheet =
+                isRosterMasterSheetName(sheetName) || detectedSheetKind === "roster";
+              const isBankSheet =
+                isBankMasterSheetName(sheetName) || detectedSheetKind === "bank";
+              const isHoldSheet =
+                isHoldMasterSheetName(sheetName) || detectedSheetKind === "hold";
+              const isSheetOneSheet =
+                isSheetOneMasterSheetName(sheetName) || detectedSheetKind === "sheet1";
 
               if (isRosterSheet) {
                 detectedMktTargetIds.add(item.id);
@@ -2110,7 +2137,11 @@ export function AEDataConfig({
           if (fileProcessedSuccessfully) {
             statusById.set(item.id, "Success");
           } else {
-            statusById.set(item.id, "Error: Invalid format");
+            const availableSheets = parsedWorkbook.sheetNames.join(", ");
+            statusById.set(
+              item.id,
+              `Error: Không nhận diện được cấu trúc sheet${availableSheets ? ` (${availableSheets})` : ""}`,
+            );
           }
         } catch (e: any) {
           statusById.set(item.id, `Error: ${e.message}`);
@@ -3087,10 +3118,14 @@ export function AEDataConfig({
                             name={`file-${row.id}`}
                             className="hidden"
                             accept=".xlsx,.xls"
-                            onChange={(e) =>
-                              e.target.files?.[0] &&
-                              handleFileUpload(row.id, e.target.files[0])
-                            }
+                            onChange={(e) => {
+                              const selectedFile = e.currentTarget.files?.[0];
+                              if (selectedFile) {
+                                void handleFileUpload(row.id, selectedFile);
+                              }
+                              // Allow choosing the same file again after an error.
+                              e.currentTarget.value = "";
+                            }}
                           />
                           <button
                             onClick={() =>
@@ -3163,9 +3198,12 @@ export function AEDataConfig({
                               <span className="whitespace-nowrap">Sẵn sàng</span>
                             </div>
                           ) : row.status.includes("Error") ? (
-                            <div className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-rose-200">
+                            <div
+                              className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-rose-200"
+                              title={row.status.replace(/^Error:\s*/i, "")}
+                            >
                               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              <span className="whitespace-nowrap">Lỗi</span>
+                              <span className="whitespace-nowrap">Lỗi định dạng</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-amber-200">

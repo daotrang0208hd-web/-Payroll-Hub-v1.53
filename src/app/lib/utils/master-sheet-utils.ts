@@ -238,3 +238,80 @@ export function isRelevantMasterSheetName(
     normalizedName.includes("SO SANH AE")
   );
 }
+
+export type MasterSheetKind =
+  | "roster"
+  | "bank"
+  | "sheet1"
+  | "hold"
+  | "bonus"
+  | "compare"
+  | "unknown";
+
+/**
+ * Detect a Master sheet from both its name and its header content. Real files
+ * often rename sheets or place them in an arbitrary order, so name-only
+ * filtering can incorrectly mark a valid upload as an invalid format.
+ */
+export function detectMasterSheetKind(
+  sheetName: unknown,
+  rows: readonly unknown[][] = [],
+): MasterSheetKind {
+  const normalizedName = normalizeMasterSheetName(sheetName);
+  if (isRosterMasterSheetName(sheetName)) return "roster";
+  if (isBankMasterSheetName(sheetName)) return "bank";
+  if (isSheetOneMasterSheetName(sheetName)) return "sheet1";
+  if (isHoldMasterSheetName(sheetName) || normalizedName.includes("ADD")) return "hold";
+  if (isBonusMasterSheetName(sheetName)) return "bonus";
+  if (normalizedName.includes("SO SANH AE")) return "compare";
+
+  const rowLimit = Math.min(rows.length, 50);
+  for (let rowIndex = 0; rowIndex < rowLimit; rowIndex++) {
+    const cells = (Array.isArray(rows[rowIndex]) ? rows[rowIndex] : [])
+      .map(normalizeMasterSheetName)
+      .filter(Boolean);
+    if (cells.length === 0) continue;
+
+    const rowText = cells.join(" | ");
+    const hasCenter =
+      rowText.includes("CENTER") ||
+      rowText.includes("TRUNG TAM") ||
+      rowText.includes("MA AE") ||
+      rowText.includes("L07");
+    const hasIdentity =
+      rowText.includes("ID NUMBER") ||
+      rowText.includes("FULL NAME") ||
+      rowText.includes("HO VA TEN") ||
+      rowText.includes("MA NV") ||
+      rowText.includes("EMPLOYEE ID");
+    const hasAccount =
+      rowText.includes("BANK ACCOUNT") ||
+      rowText.includes("SO TAI KHOAN") ||
+      rowText.includes("STK");
+    const hasTotal =
+      rowText.includes("TOTAL PAYMENT") ||
+      rowText.includes("THUC NHAN") ||
+      rowText.includes("TONG THANH TOAN") ||
+      rowText.includes("SO TIEN");
+    const hasType =
+      cells.some((cell) => cell === "TYPE" || cell === "TASK TYPE" || cell === "TASKTYPE");
+    const hasDuration =
+      rowText.includes("DURATION") ||
+      rowText.includes("TOTAL HOURS") ||
+      rowText.includes("SO GIO");
+    const moneyChargeCount = cells.filter(
+      (cell) =>
+        (cell.includes("CHARGE") && !cell.includes("CHARGE TO CENTER")) ||
+        /^(LDEC|LDEM|LPAR|LRET|MOTH)/.test(cell),
+    ).length;
+
+    if (hasCenter && hasType && hasDuration) return "roster";
+    if (hasIdentity && moneyChargeCount > 0) return "sheet1";
+    if (hasIdentity && hasAccount && hasTotal) return "bank";
+    if (hasIdentity && hasCenter && hasTotal) return "sheet1";
+    if (hasIdentity && hasTotal && rowText.includes("HOLD")) return "hold";
+    if (hasIdentity && rowText.includes("BONUS")) return "bonus";
+  }
+
+  return "unknown";
+}
