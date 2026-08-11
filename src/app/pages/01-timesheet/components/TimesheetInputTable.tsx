@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import {
+  getL07FromFileName,
   getCenterInfoByL07,
   mapL07,
   getCenterInfoByAECode
@@ -241,6 +242,15 @@ export function TimesheetInputTable({
         // Single file upload case (retry existing row)
         const file = files[0];
         onUploadFile(activeRowId, file);
+        const l07 = getL07FromFileName(file.name);
+        if (l07) {
+          onUpdateRow(activeRowId, "l07", l07);
+          const centerInfo = getCenterInfoByL07(l07);
+          if (centerInfo) {
+            onUpdateRow(activeRowId, "aeCode", centerInfo.aeCode || "");
+            onUpdateRow(activeRowId, "bus", getBusinessFromL07(l07));
+          }
+        }
       } else {
         // Multiple file upload case (new bulk upload)
         onUploadFiles(Array.from(files));
