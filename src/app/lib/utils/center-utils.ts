@@ -134,6 +134,34 @@ export function isNorthMktLocalL07(value: string): boolean {
   return (NORTH_MKT_LOCAL_L07_CODES as readonly string[]).includes(upper);
 }
 
+/**
+ * Center resolver used only by MKT Local North Roster/Q_Roster. It mirrors the
+ * original Pivot Master rules: normal center names resolve to their real L07,
+ * while MKT aliases and the regional Hai Phong aggregate keep the dedicated
+ * MKT Local L07.
+ */
+export function resolveMktRosterCenter(rawCenter: string): {
+  l07: string;
+  business: string;
+} {
+  const cleaned = String(rawCenter || "").trim();
+  const normalized = normalizeCenterKey(cleaned);
+
+  let l07 = "";
+  if (normalized === "HAIPHONG") {
+    l07 = "MKT LOCAL NORTH_HP";
+  } else if (normalized.includes("MKT") || normalized.includes("MARKETING")) {
+    l07 = resolveNorthMktLocalL07(cleaned) || "MKT LOCAL NORTH";
+  } else {
+    l07 = mapL07(cleaned) || cleaned || "UNKNOWN";
+  }
+
+  return {
+    l07,
+    business: getBusinessFromL07(l07),
+  };
+}
+
 const LOOKUP_MAP = new Map<string, CenterInfo>();
 const FILE_NAME_L07_CACHE = new Map<string, string>();
 let fileNameCenterCandidates: Array<{ info: CenterInfo; key: string }> | null =

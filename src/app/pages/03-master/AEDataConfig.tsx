@@ -24,7 +24,10 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import { useAppData } from "../../lib/contexts/AppDataContext";
-import { buildPivotFromAppData } from "../../lib/utils/pivot-utils";
+import {
+  buildPivotFromAppData,
+  PIVOT_CACHE_VERSION,
+} from "../../lib/utils/pivot-utils";
 import {
   parseMoneyToNumber,
   isMoneyColumn,
@@ -55,6 +58,17 @@ function cleanFullName(val: any): string {
   const str = String(val).trim();
   return removeVietnameseTones(str).toUpperCase();
 }
+
+function findExactRosterColumn(headers: string[], aliases: string[]): number {
+  const normalize = (value: unknown) =>
+    removeVietnameseTones(String(value || ""))
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  const normalizedAliases = new Set(aliases.map(normalize));
+  return headers.findIndex((header) => normalizedAliases.has(normalize(header)));
+}
 import {
   mapL07,
   getCenterInfoByL07,
@@ -62,6 +76,7 @@ import {
   getBusinessFromL07,
   isNorthMktLocalL07,
   resolveMktAndCenterL07,
+  resolveMktRosterCenter,
   resolveNorthMktLocalL07,
 } from "../../lib/utils/center-utils";
 import { parseDurationToHours } from "../../lib/schemas/excel-schema";
@@ -1189,13 +1204,23 @@ export function AEDataConfig({
                 const iId = getColIndex(h, "ID Number", {}, ["ID", "MÃ NV", "MANV", "TEACHER ID", "EMP ID", "CODE"]);
                 const iName = getColIndex(h, "Full name", {}, ["FULL NAME", "NAME", "HỌ VÀ TÊN", "TÊN", "HỌ TÊN"]);
                 const iDate = getColIndex(h, "Date", {}, ["DATE", "NGÀY", "TK_DATE", "SESSION DATE", "DAY"]);
-                const iType = getColIndex(h, "Type", {}, ["TYPE", "TASK TYPE", "CODE", "LOẠI", "ACTIVITY", "TASKTYPE"]);
+                const iType = findExactRosterColumn(h, ["TYPE"]);
                 const iClass = getColIndex(h, "Class", {}, ["CLASS", "LỚP", "CLASS CODE", "MÃ LỚP"]);
                 const iFrom = getColIndex(h, "From", {}, ["FROM", "START", "START TIME", "TỪ"]);
                 const iTo = getColIndex(h, "To", {}, ["TO", "END", "END TIME", "ĐẾN"]);
-                const iDuration = getColIndex(h, "Duration", {}, ["DURATION", "HOURS", "SỐ GIỜ", "GIỜ", "TK_DURATION", "TOTAL HOURS"]);
+                const iDuration = findExactRosterColumn(h, ["DURATION"]);
                 const iNotes = getColIndex(h, "Notes", {}, ["NOTES", "NOTE", "GHI CHÚ", "REMARKS"]);
-                const iChargeMkt = getColIndex(h, "Charge To Center MKT", {}, ["CHARGE TO CENTER MKT", "CHARGE TO CENTER", "CHARGETOCENTER"]);
+                const iChargeMkt = findExactRosterColumn(h, [
+                  "CHARGE TO CENTER",
+                  "CHARGE TO CENTER MKT",
+                  "CHARGETOCENTERCODE",
+                ]);
+
+                if (iType === -1 || iDuration === -1 || iChargeMkt === -1) {
+                  throw new Error(
+                    `Sheet ${sheetName} phải có đúng các cột TYPE, DURATION và CHARGE TO CENTER.`,
+                  );
+                }
 
                 for (let r = headerRowIndex + 1; r < rows.length; r++) {
                   if (
@@ -1222,9 +1247,9 @@ export function AEDataConfig({
                   const chargeToCenterMkt = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
                   const rawCenter = iCenter !== -1 && row[iCenter] !== undefined ? String(row[iCenter]).trim() : "";
                   const rawCenterForL07 = chargeToCenterMkt || rawCenter;
-                  const info = getCenterInfoByAECode(rawCenterForL07);
-                  const l07 = info?.l07 || mapL07(rawCenterForL07) || rawCenterForL07 || "UNKNOWN";
-                  const business = info?.bus || "";
+                  const resolvedRosterCenter = resolveMktRosterCenter(rawCenterForL07);
+                  const l07 = resolvedRosterCenter.l07;
+                  const business = resolvedRosterCenter.business;
                   const reportMonth = normalizeMonth(itemMonth);
 
                   rosterDataToAppend.push({
@@ -2812,6 +2837,7 @@ export function AEDataConfig({
         if (pivotResult && pivotResult.groupedData) {
           await yieldToBrowser(processingSignal);
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+            cacheVersion: PIVOT_CACHE_VERSION,
             groupedData: pivotResult.groupedData,
             typeColumns: pivotResult.typeColumns,
             diagnosticLogs: pivotResult.logs || [],

@@ -21,7 +21,10 @@ import {
   Maximize2,
 } from "lucide-react";
 import { useAppData } from "../../lib/contexts/AppDataContext";
-import { buildPivotFromAppData } from "../../lib/utils/pivot-utils";
+import {
+  buildPivotFromAppData,
+  PIVOT_CACHE_VERSION,
+} from "../../lib/utils/pivot-utils";
 import { toast } from "sonner";
 import {
   Select,
@@ -387,7 +390,9 @@ export function PivotSheet() {
       const cached = localStorage.getItem("pivot_master_processed_data");
       if (cached) {
         const parsed = JSON.parse(cached);
-        return parsed.groupedData || {};
+        return parsed.cacheVersion === PIVOT_CACHE_VERSION
+          ? parsed.groupedData || {}
+          : {};
       }
     } catch (e) {
       console.warn("Error reading pivot cache", e);
@@ -400,7 +405,9 @@ export function PivotSheet() {
       const cached = localStorage.getItem("pivot_master_processed_data");
       if (cached) {
         const parsed = JSON.parse(cached);
-        return parsed.typeColumns || [];
+        return parsed.cacheVersion === PIVOT_CACHE_VERSION
+          ? parsed.typeColumns || []
+          : [];
       }
     } catch {
       // ignore cache error
@@ -413,7 +420,9 @@ export function PivotSheet() {
       const cached = localStorage.getItem("pivot_master_processed_data");
       if (cached) {
         const parsed = JSON.parse(cached);
-        return parsed.diagnosticLogs || [];
+        return parsed.cacheVersion === PIVOT_CACHE_VERSION
+          ? parsed.diagnosticLogs || []
+          : [];
       }
     } catch {
       // ignore cache error
@@ -426,7 +435,9 @@ export function PivotSheet() {
       const cached = localStorage.getItem("pivot_master_processed_data");
       if (cached) {
         const parsed = JSON.parse(cached);
-        return parsed.sourceInfo || "";
+        return parsed.cacheVersion === PIVOT_CACHE_VERSION
+          ? parsed.sourceInfo || ""
+          : "";
       }
     } catch {
       // ignore cache error
@@ -596,6 +607,7 @@ export function PivotSheet() {
   const saveToCache = (newGroupedData: any, newTypeColumns = safeTypeColumns) => {
     try {
       localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+        cacheVersion: PIVOT_CACHE_VERSION,
         groupedData: newGroupedData,
         typeColumns: newTypeColumns,
         diagnosticLogs,
@@ -696,6 +708,7 @@ export function PivotSheet() {
         const cached = localStorage.getItem("pivot_master_processed_data");
         if (cached) {
           const parsed = JSON.parse(cached);
+          parsed.cacheVersion = PIVOT_CACHE_VERSION;
           parsed.typeColumns = next;
           localStorage.setItem("pivot_master_processed_data", JSON.stringify(parsed));
         }
@@ -896,12 +909,12 @@ export function PivotSheet() {
           const typeColIdx = headers.findIndex((h: any) => {
             if (!h) return false;
             const val = String(h).trim().toUpperCase();
-            return val === 'TYPE' || val === 'TASK TYPE' || val === 'LOẠI' || val === 'TASK' || val === 'TASKTYPE' || val === 'COST TYPE' || val === 'CLASS CODE' || val === 'CLASS';
+            return val === 'TYPE';
           });
           const durationColIdx = headers.findIndex((h: any) => {
             if (!h) return false;
             const val = String(h).trim().toUpperCase();
-            return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ' || val === 'GIỜ' || val === 'TK_DURATION' || val === 'TOTAL HOURS';
+            return val === 'DURATION';
           });
 
           if (centerColIdx === -1 || typeColIdx === -1 || durationColIdx === -1) continue;
@@ -969,7 +982,11 @@ export function PivotSheet() {
     if (!showToastMsg && cachedStr) {
       try {
         const parsed = JSON.parse(cachedStr);
-        if (parsed.groupedData && Object.keys(parsed.groupedData).length > 0) {
+        if (
+          parsed.cacheVersion === PIVOT_CACHE_VERSION &&
+          parsed.groupedData &&
+          Object.keys(parsed.groupedData).length > 0
+        ) {
           setGroupedData(parsed.groupedData);
           setTypeColumns(parsed.typeColumns || []);
           setDiagnosticLogs(parsed.diagnosticLogs || []);
@@ -1007,6 +1024,7 @@ export function PivotSheet() {
 
         try {
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+            cacheVersion: PIVOT_CACHE_VERSION,
             groupedData: res?.groupedData || {},
             typeColumns: res?.typeColumns || [],
             diagnosticLogs: [],
@@ -1095,6 +1113,7 @@ export function PivotSheet() {
 
         try {
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+            cacheVersion: PIVOT_CACHE_VERSION,
             groupedData: resGrouped,
             typeColumns: resTypes,
             diagnosticLogs,
@@ -1176,6 +1195,7 @@ export function PivotSheet() {
 
       try {
         localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+          cacheVersion: PIVOT_CACHE_VERSION,
           groupedData: mergedGroupedData,
           typeColumns: mergedTypeColumns,
           diagnosticLogs: mergedLogs,

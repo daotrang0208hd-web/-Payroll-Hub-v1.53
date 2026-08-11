@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { getBusinessFromL07, mapL07 } from "./center-utils";
 
+export const PIVOT_CACHE_VERSION = 2;
+
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
   let t = String(typeRaw).trim();
@@ -132,6 +134,32 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     newGroupedData[bu][l07][month][type] += amount;
   };
 
+  // MKT Local North is supplied twice by the Master flow:
+  // 1) Gross Pay contains one aggregate "Charge MKT Local" amount.
+  // 2) Roster/Q_Roster contains the detailed replacement by TYPE and center.
+  // When detailed Roster data exists, the aggregate must not be added again.
+  const mktRosterDetailMonths = new Set<string>();
+  rosterRows.forEach((row) => {
+    if (!row) return;
+    const type = String(
+      row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || "",
+    ).trim();
+    const center = String(
+      row["chargeToCenterCode"] ||
+        row["chargeToCenterMkt"] ||
+        row["CHARGE TO CENTER"] ||
+        row["Center"] ||
+        row["center"] ||
+        "",
+    ).trim();
+    if (!type || !center) return;
+    mktRosterDetailMonths.add(
+      String(
+        row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026",
+      ).trim(),
+    );
+  });
+
   sheet1Rows.forEach((row) => {
     if (!row) return;
     const rawCenter =
@@ -145,6 +173,12 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     const bu = row["Business"] || row["BU"] || getBusinessFromL07(l07);
     const month = row["Tháng báo cáo"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     if (!l07) return;
+    const isMktLocalNorthAggregate = /^MKT LOCAL NORTH(?:_|$)/i.test(
+      String(l07).trim(),
+    );
+    const hasMktRosterTypeDetails = mktRosterDetailMonths.has(
+      String(month).trim(),
+    );
 
     // Check if row contains individual charge columns
     let processedChargeCols = false;
@@ -156,6 +190,16 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
       if (uKey.includes("CHARGE") || uKey.startsWith("LDEC") || uKey.startsWith("LDEM") || uKey.startsWith("LPAR") || uKey.startsWith("LRET") || uKey.startsWith("MOTH")) {
         const amt = parseMoney(row[key]);
         const cleanType = formatPivotTypeHeader(key);
+        if (
+          hasMktRosterTypeDetails &&
+          isMktLocalNorthAggregate &&
+          cleanType === "MKT LOCAL"
+        ) {
+          // Mark the aggregate as handled even when its value is zero, so the
+          // TOTAL PAYMENT fallback cannot recreate the removed MKT LOCAL column.
+          processedChargeCols = true;
+          return;
+        }
         if (amt !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
           processedChargeCols = true;
           addAmount(bu, l07, month, key, amt);
