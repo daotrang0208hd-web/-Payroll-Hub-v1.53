@@ -1090,11 +1090,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       >
         <div className="absolute inset-0 bg-accent/5 opacity-[0.05] pointer-events-none hidden" />
 
-        <div 
-          className="flex flex-col md:flex-row items-center justify-between gap-4 bg-accent/5 shrink-0 border-b border-border/60 relative z-10 overflow-hidden rounded-none w-full max-w-full"
-          style={{ minHeight: "60px", paddingTop: "12px", paddingBottom: "12px", paddingLeft: "12px", paddingRight: "12px", borderWidth: "0.5px" }}
+        <div
+          id="timesheet-summary-header"
+          className="unified-table-frame-header relative z-10 flex min-h-[56px] w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 bg-primary/[0.035] px-3 py-2 md:flex-row md:items-center"
         >
-          <div className="absolute inset-0 bg-accent/5 opacity-[0.03] pointer-events-none rounded-none" />
           {computedData?.error && (
             <div className="absolute top-0 left-0 right-0 bg-red-100 text-red-600 p-2 text-center text-xs font-bold z-50">
               WORKER ERROR: {computedData.error}
@@ -1121,81 +1120,58 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               </div>
             </div>
           )}
-          <div className="flex items-center gap-5 relative z-10">
+          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
             {onBack && (
               <button
                 onClick={onBack}
-                className="flex w-10 h-10 items-center justify-center rounded-full border border-border bg-card text-foreground hover:bg-slate-100 active:scale-[0.98] active:translate-y-[1px] transition-all group shadow-sm cursor-pointer"
+                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
                 title="Quay lại"
+                aria-label="Quay lại bảng Timesheet"
               >
-                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                <ArrowLeft className="h-4 w-4" />
               </button>
             )}
-            <div 
-              className="bg-primary flex items-center justify-center shadow-md shadow-primary/20 shrink-0"
-              style={{ width: "39.998px", height: "39.998px", borderRadius: "27px" }}
-            >
-              <FileSpreadsheet className="text-white" style={{ width: "23px", height: "23px" }} />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+              <FileSpreadsheet className="h-4 w-4" />
             </div>
 
-            <div style={{ paddingTop: "0px", paddingBottom: "0px" }}>
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <h1 className="font-normal font-serif tracking-tight flex items-baseline gap-1" style={{ lineHeight: "1.2", fontSize: "26px", color: "#4c504a" }}>
-                  Cài đặt{" "}
-                  <span className="not-italic font-script text-[#c09e9a] inline-block" style={{ fontFamily: "Waterfall, cursive", lineHeight: "1", fontSize: "33px", fontWeight: "normal" }}>
-                    & Tải file
-                  </span>
-                  <span 
-                    className="tracking-tight" 
-                    style={{ 
-                      lineHeight: "23px",
-                      fontFamily: "Corinthia, cursive",
-                      fontWeight: "bold",
-                      color: "#c09e9a",
-                      marginLeft: "4px",
-                      fontSize: "23px"
-                    }}
-                  >
-                    (Timesheet)
-                  </span>
-                </h1>
-              </div>
-              <div className="flex items-center gap-3 text-xs font-semibold tracking-wider uppercase" style={{ paddingTop: "0px", paddingBottom: "0px" }}>
-                <span className="flex items-center gap-1">
-                  <span className="font-extrabold text-foreground text-[13px]">{inputRows.length || 0}</span>{" "}
-                  <span className="text-[10px] lowercase" style={{ color: "#888888" }}>centers</span>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
+                Cài đặt &amp; tải file Timesheet
+              </h1>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium leading-4 text-muted-foreground">
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{inputRows.length || 0}</strong>
+                  trung tâm
                 </span>
-                <span className="text-accent/30 font-normal">•</span>
-                <span className="flex items-center gap-1">
-                  <span className="font-extrabold text-foreground text-[13px]">{computedData?.employeeSummary?.length || 0}</span>{" "}
-                  <span className="text-[10px] lowercase" style={{ color: "#888888" }}>employees</span>
+                <span aria-hidden="true" className="text-border">•</span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{computedData?.employeeSummary?.length || 0}</strong>
+                  nhân sự
                 </span>
-                <span className="text-accent/30 font-normal">•</span>
-                <span className="flex items-center gap-1">
-                  <span className="font-extrabold text-foreground text-[13px]">{(computedData?.processedRosterData?.length || 0).toLocaleString()}</span>{" "}
-                  <span className="text-[10px] lowercase" style={{ color: "#888888" }}>records</span>
+                <span aria-hidden="true" className="text-border">•</span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{(computedData?.processedRosterData?.length || 0).toLocaleString()}</strong>
+                  bản ghi
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3" style={{ height: "30.987px" }}>
-            <div className="flex items-center gap-3">
+          <div className="relative z-10 flex shrink-0 items-center justify-end">
+            <div className="flex items-center">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button 
                     id="summary-settings-btn"
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-full border border-slate-200/80 bg-[#edf4f9] hover:bg-[#e2edf5] active:scale-[0.98] active:translate-y-[1px] transition-all group shadow-sm z-10 relative cursor-pointer"
-                    style={{ height: "32.9916px", paddingTop: "4px", paddingBottom: "4px" }}
+                    className="group relative z-10 flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+                    aria-label="Mở cài đặt Timesheet"
                   >
-                    <Settings className="w-4 h-4 text-[#7A1C1C] group-hover:rotate-45 transition-transform duration-500 shrink-0" />
-                    <span 
-                      className="font-sans font-black text-xs tracking-wider text-[#0f2a4a] select-none"
-                      style={{ lineHeight: "13px", fontSize: "9px" }}
-                    >
+                    <Settings className="h-3.5 w-3.5 shrink-0 text-primary transition-transform duration-300 group-hover:rotate-45" />
+                    <span className="hidden select-none text-[10px] font-bold uppercase tracking-wide sm:inline">
                       CÀI ĐẶT
                     </span>
-                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
