@@ -86,6 +86,7 @@ import {
   getGrossPaySourceChargeColumns,
   isGrossPayChargeAmountColumn,
   mergeGrossPayHeaders,
+  sanitizeGrossPayHeaders,
 } from "../../lib/utils/gross-pay-utils";
 import { toast } from "sonner";
 import {
@@ -2704,10 +2705,10 @@ export function AEDataConfig({
         // Merge Sheet1_AE with existing data to keep multiple months
         const existingSheet1 = prev.Sheet1_AE?.data || [];
         const sheet1Map = new Map<string, any>();
-        const mergedSheet1Headers = mergeGrossPayHeaders(
+        const mergedSheet1Headers = sanitizeGrossPayHeaders(mergeGrossPayHeaders(
           sheet1Headers,
           prev.Sheet1_AE?.headers || [],
-        );
+        ));
         const refreshedSheet1Files = new Set(
           targets
             .filter((target) => !isMktMasterInput(target))

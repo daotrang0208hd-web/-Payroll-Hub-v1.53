@@ -165,15 +165,39 @@ export function isGrossPayChargeAmountColumn(header: unknown): boolean {
   return canonicalizeGrossPayChargeHeader(header) !== "";
 }
 
+/** Roster Type columns belong to Pivot Master, never to Sheet 1 / Gross Pay. */
+export function isPivotRosterTypeColumn(header: unknown): boolean {
+  const compact = normalizeGrossPayHeader(header).replace(/\s+/g, "");
+  return /^(LDEC|LDEM|LPAR|LRET|MOTH)\d*$/.test(compact);
+}
+
+export function sanitizeGrossPayHeaders(
+  headers: readonly string[],
+): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  headers.forEach((header) => {
+    if (isPivotRosterTypeColumn(header)) return;
+    const normalized = normalizeGrossPayHeader(header);
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    result.push(header);
+  });
+
+  return result;
+}
+
 /** Add newly discovered Sheet 1 amount columns immediately before TOTAL. */
 export function mergeGrossPayHeaders(
   baseHeaders: readonly string[],
   additionalHeaders: readonly string[],
 ): string[] {
-  const result = [...baseHeaders];
+  const result = sanitizeGrossPayHeaders(baseHeaders);
   const existing = new Set(result.map(normalizeGrossPayHeader));
 
   additionalHeaders.forEach((rawHeader) => {
+    if (isPivotRosterTypeColumn(rawHeader)) return;
     const header = canonicalizeGrossPayChargeHeader(rawHeader) || rawHeader;
     const normalized = normalizeGrossPayHeader(header);
     if (!normalized || existing.has(normalized)) return;
@@ -229,11 +253,30 @@ export function finalizeGrossPayAmounts(
   return total;
 }
 
-/** Stable identity that does not change when a payroll amount is corrected. */
+/**
+ * One Gross Pay row represents one employee in one reporting month. File name,
+ * source row and amount are deliberately excluded so uploading a renamed copy
+ * cannot multiply the same payroll data.
+ */
 export function getGrossPayRowIdentity(
   row: Record<string, any>,
   fallbackMonth = "",
 ): string {
+  const month = normalizeGrossPayHeader(
+    row["Tháng báo cáo"] || row._fileMonth || fallbackMonth,
+  );
+  const id = normalizeGrossPayHeader(row["ID Number"]);
+  if (id) return `ID|${id}|${month}`;
+
+  const account = String(row["Bank Account Number"] || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  if (account) return `ACCOUNT|${account}|${month}`;
+
+  const fullName = normalizeGrossPayHeader(row["Full name"]);
+  const l07 = normalizeGrossPayHeader(row.L07);
+  if (fullName) return `NAME|${fullName}|${l07}|${month}`;
+
   const sourceFile = normalizeGrossPayHeader(
     row["TÊN FILE"] || row._sourceFile,
   );
@@ -241,20 +284,5 @@ export function getGrossPayRowIdentity(
     row._sourceSheet || row["Sheet Source"],
   );
   const sourceRow = String(row._sourceRow || "").trim();
-  const month = normalizeGrossPayHeader(
-    row["Tháng báo cáo"] || row._fileMonth || fallbackMonth,
-  );
-
-  if (sourceFile && sourceRow) {
-    return `${sourceFile}|${sourceSheet}|${sourceRow}|${month}`;
-  }
-
-  const id = normalizeGrossPayHeader(row["ID Number"]);
-  const fullName = normalizeGrossPayHeader(row["Full name"]);
-  const l07 = normalizeGrossPayHeader(row.L07);
-  const account = String(row["Bank Account Number"] || "")
-    .replace(/\s+/g, "")
-    .toUpperCase();
-  const total = Math.round(parseMoneyToNumber(row["TOTAL PAYMENT"]));
-  return `${id}|${fullName}|${l07}|${account}|${month}|${total}`;
+  return `SOURCE|${sourceFile}|${sourceSheet}|${sourceRow}|${month}`;
 }

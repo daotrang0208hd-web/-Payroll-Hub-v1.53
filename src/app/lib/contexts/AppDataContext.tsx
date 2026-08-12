@@ -19,8 +19,11 @@ import {
 } from "../utils/center-utils";
 import {
   finalizeGrossPayAmounts,
+  getGrossPayRowIdentity,
   isGrossPayChargeAmountColumn,
+  isPivotRosterTypeColumn,
   mergeGrossPayHeaders,
+  sanitizeGrossPayHeaders,
 } from "../utils/gross-pay-utils";
 import {
   buildBankAccountIndex,
@@ -178,13 +181,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
                 }
               });
             });
-            const grossPayHeaders = mergeGrossPayHeaders(
+            const grossPayHeaders = sanitizeGrossPayHeaders(mergeGrossPayHeaders(
               saved.Sheet1_AE.headers || [],
               [...discoveredGrossPayHeaders],
-            );
+            ));
             saved.Sheet1_AE.headers = grossPayHeaders;
-            saved.Sheet1_AE.data = saved.Sheet1_AE.data.map((row: any) => {
+            const repairedRows = new Map<string, any>();
+            saved.Sheet1_AE.data.forEach((row: any) => {
               const newRow = { ...row };
+              Object.keys(newRow).forEach((key) => {
+                if (isPivotRosterTypeColumn(key)) delete newRow[key];
+              });
               grossPayHeaders.forEach((header) => {
                 if (isGrossPayChargeAmountColumn(header)) {
                   newRow[header] = parseMoneyToNumber(newRow[header]);
@@ -195,8 +202,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
                 grossPayHeaders,
                 isNorthMktLocalL07(newRow.L07),
               );
-              return newRow;
+              const key = getGrossPayRowIdentity(
+                newRow,
+                saved.globalMonth || "",
+              );
+              repairedRows.set(key, newRow);
             });
+            saved.Sheet1_AE.data = Array.from(repairedRows.values()).map(
+              (row: any, index) => ({
+                ...row,
+                "No.": index + 1,
+                No: index + 1,
+              }),
+            );
           }
           // ------------------------------
 
