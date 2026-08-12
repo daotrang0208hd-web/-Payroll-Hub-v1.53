@@ -5,7 +5,7 @@ import {
 } from "./center-utils";
 import { parseDurationToHours } from "../schemas/excel-schema";
 
-export const PIVOT_CACHE_VERSION = 6;
+export const PIVOT_CACHE_VERSION = 7;
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -154,22 +154,27 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     const month = row["Tháng báo cáo"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     if (!l07) return;
 
-    const centerHasMkt = String(l07).toUpperCase().includes("MKT");
+    // MKT LOCAL NORTH is only the temporary Gross Pay bucket. Its Roster
+    // amounts are distributed to the real L07 rows below, therefore it must
+    // remain zero in Pivot Master (matching the reference report).
+    if (String(l07).trim().toUpperCase() === "MKT LOCAL NORTH") return;
 
     // Check if row contains individual charge columns
     let processedChargeCols = false;
     Object.keys(row).forEach((key) => {
       const uKey = key.toUpperCase().trim();
       if (KNOWN_NON_CHARGE_KEYS.has(uKey)) return;
-      if (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM")) return;
+      // Keep identity Center columns out, but do not discard the monetary
+      // column named "Charge To Center MKT".
+      if (
+        !uKey.includes("CHARGE") &&
+        (uKey.includes("CENTER") || uKey.includes("TRUNG TÂM"))
+      ) return;
 
       if (uKey.includes("CHARGE") || uKey.startsWith("LDEC") || uKey.startsWith("LDEM") || uKey.startsWith("LPAR") || uKey.startsWith("LRET") || uKey.startsWith("MOTH")) {
         const amt = parseMoney(row[key]);
         const cleanType = formatPivotTypeHeader(key);
         if (amt !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
-          if ((cleanType === "MKT LOCAL" || cleanType === "MKT LOCAL NORTH") && !centerHasMkt) {
-            return;
-          }
           processedChargeCols = true;
           addAmount(bu, l07, month, key, amt);
         }
@@ -181,9 +186,6 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
       const type = row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "UNSPECIFIED";
       const cleanType = formatPivotTypeHeader(type);
       if (totalPay !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
-        if ((cleanType === "MKT LOCAL" || cleanType === "MKT LOCAL NORTH") && !centerHasMkt) {
-          return;
-        }
         addAmount(bu, l07, month, type, totalPay);
       }
     }
