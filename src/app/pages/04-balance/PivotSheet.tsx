@@ -1699,10 +1699,10 @@ export function PivotSheet() {
   return (
     <div className="unified-table-frame flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
       {/* HEADER SECTION */}
-      <div className="unified-table-frame-header flex h-[54px] min-h-[54px] flex-wrap items-center justify-between gap-3 border-b border-[#e7dbdc] bg-primary/[0.035] px-3 py-0">
+      <div className="unified-table-frame-header flex min-h-[56px] flex-wrap items-center justify-between gap-3 border-b border-border bg-primary/[0.035] px-3 py-2">
         <div className="flex items-center gap-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/20 bg-[var(--card,#fff)] text-primary shadow-2xs">
-            <FileSpreadsheet className="h-3.5 w-3.5" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <FileSpreadsheet className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -1753,10 +1753,10 @@ export function PivotSheet() {
           <div className="relative" ref={settingsMenuRef}>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className="h-[25px] px-[6px] bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg shadow-2xs cursor-pointer transition-all flex items-center justify-center gap-1.5 text-xs font-medium"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
               title="Cài đặt & Thao tác"
             >
-              <SlidersHorizontal className="w-4 h-4 text-slate-600" />
+              <SlidersHorizontal className="w-4 h-4 text-primary" />
             </button>
 
             {isSettingsOpen && (

@@ -817,7 +817,7 @@ export function MasterAE() {
   }, [setActiveTab, handleRefreshData, handleExportExcel]);
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
+    <div className="page-master-ae flex-1 flex flex-col min-h-0 relative overflow-hidden bg-transparent">
       <AnimatePresence initial={false}>
         {view === "list" && (
           <motion.div
@@ -825,8 +825,8 @@ export function MasterAE() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: "100%" }}
-            className="flex-1 flex flex-col min-h-0 gap-4 relative overflow-hidden bg-transparent w-full px-5 pt-2 pb-5"
-            style={{ paddingTop: "12px" }}
+            className="flex-1 flex flex-col min-h-0 gap-4 relative overflow-hidden bg-transparent w-full"
+            style={{ padding: "6px" }}
           >
             {/* Inner Content Area holding Table */}
             <div className="flex-1 min-h-0 relative overflow-hidden w-full h-full">
@@ -836,8 +836,8 @@ export function MasterAE() {
                 style={{ paddingTop: "0px", paddingBottom: "0px", borderWidth: "0px", paddingLeft: "0px", paddingRight: "0px", borderColor: "#ccd5ef" }}
               >
                 <div 
-                  className="table-container flex-1 flex flex-col min-h-0 relative bg-card rounded-none shadow-sm overflow-hidden master-ae-table-wrapper"
-                  style={{ paddingTop: "0px", paddingLeft: "0px", paddingRight: "0px", paddingBottom: "0px", backgroundColor: "#F8F7F4", borderColor: "#F8F7F4", borderWidth: "0px" }}
+                  className="table-container flex-1 flex flex-col min-h-0 relative bg-transparent rounded-none shadow-none overflow-hidden master-ae-table-wrapper"
+                  style={{ paddingTop: "0px", paddingLeft: "0px", paddingRight: "0px", paddingBottom: "0px", borderWidth: "0px" }}
                 >
                   {activeTab === "BulkPayment" && (
                     <BulkPayment
@@ -857,7 +857,7 @@ export function MasterAE() {
                   </div>
                   {activeTab !== "BulkPayment" && activeTab !== "Pivot" && (
                     <div className="flex-1 flex flex-col min-h-0 w-full h-full overflow-hidden relative">
-                      <div className="absolute inset-0 striped-pattern opacity-[0.05] pointer-events-none overflow-hidden" />
+                      <div className="absolute inset-0 striped-pattern opacity-0 pointer-events-none overflow-hidden" />
                       
                       {activeTab === "Hold_AE" ? (
                         <HoldAETable
@@ -889,17 +889,15 @@ export function MasterAE() {
                         </div>
                       ) : (
                         <div 
-                          className="unified-table-frame flex-1 flex flex-col min-h-0 w-full h-full px-0 py-0 m-0 relative overflow-hidden gap-0 bg-white border border-[#e7dbdc] dark:border-slate-700 shadow-xs z-10"
-                          style={{ borderRadius: "0px", borderWidth: "1px", borderColor: "#cbd5e1" }}
+                          className="unified-table-frame flex-1 flex flex-col min-h-0 w-full h-full px-0 py-0 m-0 relative overflow-hidden gap-0 bg-card border border-border shadow-xs z-10"
                         >
                           {/* Top Toolbar Header with Settings Button */}
-                          <div className="unified-table-frame-header px-4 py-2 border-b border-[#cbd5e1] flex items-center justify-between gap-4 shrink-0 select-none bg-white" style={{ height: "56px" }}>
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center justify-center rounded-full border border-slate-200 bg-white shadow-3xs w-7 h-7 p-0 shrink-0">
-                                <Columns2 className="w-3.5 h-3.5 text-primary" />
+                          <div className="unified-table-frame-header flex min-h-[56px] items-center justify-between gap-3 bg-primary/[0.035] px-3 py-2 shrink-0 select-none">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                                <Columns2 className="h-4 w-4" />
                               </div>
-                              <span className="text-slate-400 font-bold text-sm select-none">•</span>
-                              <h3 className="font-bold uppercase tracking-wider text-primary text-[11px] font-display">
+                              <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
                                 {activeTab === "Sheet1_AE"
                                   ? `GROSS PAY - THÁNG ${appData.globalMonth}`
                                   : activeTab === "Deductions"
@@ -912,7 +910,7 @@ export function MasterAE() {
                               </h3>
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex shrink-0 items-center gap-3">
                               {cameFromBulkPayment && activeTab !== "BulkPayment" && (
                                 <button
                                   onClick={() => {
@@ -934,7 +932,7 @@ export function MasterAE() {
                               {/* Search Input shown dynamically based on showSearch state */}
                               {showSearch && (
                                 <div 
-                                  className="flex items-center gap-2 px-3 py-1 text-xs bg-white border border-[#cbd5e1] shadow-3xs rounded-full h-8 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all animate-in fade-in slide-in-from-right duration-250"
+                                  className="flex h-8 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs shadow-sm transition-all focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 animate-in fade-in slide-in-from-right duration-250"
                                   style={{ width: "220px" }}
                                 >
                                   <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -943,7 +941,7 @@ export function MasterAE() {
                                     placeholder="Tìm kiếm..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full bg-transparent border-none outline-none text-xs text-slate-800 placeholder:text-slate-400"
+                                    className="w-full bg-transparent border-none outline-none text-xs text-foreground placeholder:text-muted-foreground"
                                   />
                                   {searchTerm && (
                                     <button
@@ -970,13 +968,13 @@ export function MasterAE() {
                               {/* Key statistics block perfectly matching the second image */}
                               <div className="flex items-center gap-4 mr-1">
                                 <div className="flex flex-col items-end">
-                                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter whitespace-nowrap">NHÂN VIÊN</span>
-                                  <span className="text-xs font-black text-slate-800 leading-tight">{currentData.data.length}</span>
+                                  <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-tighter whitespace-nowrap">NHÂN VIÊN</span>
+                                  <span className="text-xs font-black text-foreground leading-tight">{currentData.data.length}</span>
                                 </div>
-                                <div className="flex flex-col items-end border-l border-slate-200 pl-4">
-                                  <span className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter whitespace-nowrap">TỔNG TIỀN</span>
-                                  <div className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100/80 mt-0.5">
-                                    <span className="text-xs font-black text-slate-800 tracking-tight font-mono">{formatVNRobust(currentTabTotalSum, 0)}</span>
+                                <div className="flex flex-col items-end border-l border-border pl-4">
+                                  <span className="text-[8px] font-bold text-muted-foreground uppercase tracking-tighter whitespace-nowrap">TỔNG TIỀN</span>
+                                  <div className="bg-muted/60 px-2 py-0.5 rounded border border-border/60 mt-0.5">
+                                    <span className="text-xs font-black text-foreground tracking-tight font-mono">{formatVNRobust(currentTabTotalSum, 0)}</span>
                                   </div>
                                 </div>
                               </div>
@@ -985,10 +983,12 @@ export function MasterAE() {
                                  <DropdownMenu>
                                    <DropdownMenuTrigger asChild>
                                      <button
-                                       className="w-9 h-9 rounded-full bg-white border border-[#e7dbdc]/80 text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-all shadow-xs active:scale-95 cursor-pointer flex items-center justify-center shrink-0"
+                                       className="group flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
                                        title="Cài đặt & Thao tác"
                                      >
-                                       <Settings className="w-4 h-4 text-slate-600 hover:rotate-45 transition-transform duration-300" />
+                                       <Settings className="h-3.5 w-3.5 text-primary transition-transform duration-300 group-hover:rotate-45" />
+                                       <span className="hidden text-[10px] font-bold uppercase tracking-wide sm:inline">CÀI ĐẶT</span>
+                                       <ChevronDown className="h-3 w-3 text-muted-foreground" />
                                      </button>
                                    </DropdownMenuTrigger>
                                  <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl shadow-2xl border-slate-100 z-[99999]">
@@ -1086,8 +1086,8 @@ export function MasterAE() {
                             hideSearch={true}
                             showPagination={true}
                             showFooter={true}
-                            footerClassName="bg-[var(--table-header-bg,#FAF9F6)] text-slate-800 border-t border-[#e7dbdc] font-bold"
-                            headerClassName="bg-[var(--table-header-bg,#FAF9F6)] text-slate-800 border-[#e7dbdc] font-bold"
+                            footerClassName="bg-card text-foreground border-t border-border font-bold"
+                            headerClassName="bg-slate-100 text-accent border-[#E2E8F0] font-bold"
                           />
                         </div>
                       )}

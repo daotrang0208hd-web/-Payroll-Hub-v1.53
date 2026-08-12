@@ -14,10 +14,11 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Wrench,
+  Settings,
   Search,
   Folder,
-  Database,
   Download,
   FileDown,
 } from "lucide-react";
@@ -68,11 +69,6 @@ import {
 } from "../../lib/utils/center-utils";
 import { parseDurationToHours } from "../../lib/schemas/excel-schema";
 import { toast } from "sonner";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "../../components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -2486,30 +2482,55 @@ export function AEDataConfig({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="flex-1 flex flex-col min-h-0 bg-transparent p-4 sm:p-6 md:p-8 items-center overflow-hidden w-full max-w-full"
+      className="page-master-config flex-1 flex flex-col min-h-0 bg-transparent m-0 gap-4 w-full h-full overflow-hidden"
+      style={{ padding: "6px" }}
     >
-      {/* Main Content Card */}
-      <div className="bg-card text-card-foreground soft-card force-light flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-2xl shadow-sm border border-border/60">
-        <div className="absolute inset-0 striped-pattern opacity-[0.05] pointer-events-none" />
+      {/* One shared frame for title, data area and pagination. */}
+      <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-none border border-border">
 
         {/* Integrated Header & Controls */}
-        <div className="px-6 sm:px-8 py-5 flex flex-col md:flex-row items-center justify-between gap-4 bg-muted/20 shrink-0 border-b border-border relative z-10 overflow-hidden">
-          <div className="flex items-center gap-4 relative z-10 shrink-0">
-            <div className="bg-primary/10 flex items-center justify-center rounded-2xl border border-primary/20 shrink-0 w-12 h-12" style={{ borderWidth: "0.5px" }}>
-              <Database className="w-6 h-6 text-primary" />
+        <div className="unified-table-frame-header relative z-10 flex min-h-[56px] w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 bg-primary/[0.035] px-3 py-2 md:flex-row md:items-center">
+          <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (onSwitchToFinal) onSwitchToFinal();
+                else navigate("/master-ae");
+              }}
+              className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+              title="Quay lại Gross Pay"
+              aria-label="Quay lại bảng Gross Pay"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+              <FileSpreadsheet className="h-4 w-4" />
             </div>
 
-            <div>
-              <h2 className="text-2xl sm:text-3xl text-[#6b9d99] font-script" style={{ fontFamily: "'Great Vibes', 'Corinthia', cursive", fontSize: "36px", lineHeight: "1.2" }}>
-                Files from ae
-              </h2>
-              <p className="text-[0.625rem] font-bold text-muted-foreground uppercase tracking-[0.2em]">
-                MANAGEMENT • {appData.Sheet1_AE.data.length} RECORDS
-              </p>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
+                Cài đặt &amp; tải file Master
+              </h1>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] font-medium leading-4 text-muted-foreground">
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{appData.Ae_Global_Inputs.length || 0}</strong>
+                  file cấu hình
+                </span>
+                <span aria-hidden="true" className="text-border">•</span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{appData.Sheet1_AE.data.length || 0}</strong>
+                  bản ghi Gross Pay
+                </span>
+                <span aria-hidden="true" className="text-border">•</span>
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  <strong className="font-bold text-foreground">{appData.Q_Roster?.length || 0}</strong>
+                  bản ghi MKT
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          <div className="relative z-10 flex shrink-0 items-center justify-end gap-2">
             <AnimatePresence>
               {showSearch && (
                 <motion.div
@@ -2525,8 +2546,7 @@ export function AEDataConfig({
                     placeholder="TÌM KIẾM..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-primary/5 border border-primary/10 pl-10 pr-4 py-2 text-xs w-64 uppercase font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all focus:w-80"
-                    style={{ borderRadius: "20px" }}
+                    className="h-8 w-56 rounded-full border border-border bg-card pl-9 pr-3 text-[11px] font-medium text-foreground shadow-sm outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
                     autoFocus
                   />
                   <Search className="w-4 h-4 text-primary/30 absolute left-3.5 top-1/2 -translate-y-1/2 group-focus-within:text-primary transition-colors" />
@@ -2534,7 +2554,7 @@ export function AEDataConfig({
               )}
             </AnimatePresence>
 
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
               {/* Hidden multi-file upload input */}
               <input
                 type="file"
@@ -2546,23 +2566,9 @@ export function AEDataConfig({
               />
 
               <button
-                onClick={() => {
-                  if (onSwitchToFinal) {
-                    onSwitchToFinal();
-                  } else {
-                    navigate("/master-ae");
-                  }
-                }}
-                className="flex items-center gap-2 px-4 py-2 border border-primary/20 rounded-full bg-primary/5 text-primary font-bold text-[0.7rem] uppercase tracking-wider hover:bg-primary/10 transition-colors shadow-sm whitespace-nowrap h-10"
-              >
-                <span>Go to Gross Pay</span>
-                <ChevronRight className="w-4 h-4 shrink-0" />
-              </button>
-
-              <button
                 onClick={() => processAEData()}
                 disabled={isProcessing}
-                className="soft-button bg-primary text-primary-foreground shadow-md flex items-center gap-2 px-5 py-2 rounded-full font-bold text-[0.7rem] uppercase tracking-wider hover:bg-primary/90 transition-colors whitespace-nowrap h-10"
+                className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
               >
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -2573,22 +2579,22 @@ export function AEDataConfig({
               </button>
 
               <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <DropdownMenuTrigger asChild>
-                      <button className="w-10 h-10 flex items-center justify-center rounded-full border border-border bg-card text-card-foreground text-muted-foreground hover:text-primary transition-all group shadow-sm shrink-0">
-                        <Wrench className="w-5 h-5 group-hover:rotate-45 transition-transform duration-500" />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>Cài đặt</TooltipContent>
-                </Tooltip>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="group relative z-10 flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+                    aria-label="Mở cài đặt Master"
+                  >
+                    <Settings className="h-3.5 w-3.5 shrink-0 text-primary transition-transform duration-300 group-hover:rotate-45" />
+                    <span className="hidden select-none text-[10px] font-bold uppercase tracking-wide sm:inline">CÀI ĐẶT</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="end"
-                  className="w-64 border border-primary/10 shadow-xl p-1.5 bg-card text-card-foreground"
+                  className="w-64 rounded-2xl border border-border/50 bg-card p-2 text-card-foreground shadow-2xl z-[999999]"
                 >
-                  <DropdownMenuLabel className="font-bold uppercase text-[0.625rem] tracking-widest text-primary/60 px-3 py-2">
-                    Thao tác dữ liệu
+                  <DropdownMenuLabel className="px-3 py-2 text-[0.625rem] font-bold uppercase tracking-widest text-muted-foreground">
+                    Cài đặt &amp; tiện ích
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-primary/10 mx-1.5" />
 
@@ -2660,7 +2666,7 @@ export function AEDataConfig({
         </div>
 
         {isProcessing && (
-          <div className="mx-6 mt-4 p-4 border border-primary/10 bg-primary/5 flex flex-col gap-3 text-primary rounded-2xl shadow-sm">
+          <div className="relative z-10 flex shrink-0 flex-col gap-1.5 border-b border-border bg-primary/[0.025] px-3 py-2 text-primary">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -2670,7 +2676,7 @@ export function AEDataConfig({
               </div>
               <span className="text-xs font-bold">{Math.round(progress)}%</span>
             </div>
-            <div className="w-full bg-card text-card-foreground/50 rounded-full h-2 overflow-hidden border border-primary/5">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="bg-primary h-full transition-all duration-300"
                 style={{ width: `${progress}%` }}
@@ -2679,9 +2685,9 @@ export function AEDataConfig({
           </div>
         )}
 
-        <div className="flex-1 min-h-0 flex flex-col w-full max-w-full font-[family-name:var(--font-table,var(--font-main))] overflow-hidden data-table-wrapper">
-          <div className="flex-1 min-h-0 w-full max-w-full overflow-auto custom-scrollbar shadow-sm" style={{ backgroundColor: "#faf9f6" }}>
-            <table className="min-w-max w-full border-separate border-spacing-0 table-auto text-left" style={{ borderWidth: "0px" }}>
+        <div className="data-table-wrapper flex-1 min-h-0 flex flex-col w-full max-w-full font-[family-name:var(--font-table,var(--font-main))] overflow-hidden">
+          <div className="table-body-region flex-1 min-h-0 w-full max-w-full overflow-auto custom-scrollbar bg-card shadow-none">
+            <table className="master-config-table min-w-max w-full border-separate border-spacing-0 table-auto text-left" style={{ borderWidth: "0px" }}>
               <thead>
                 <tr style={{ backgroundColor: "var(--table-header-bg, #FAF3E8)" }}>
                   <th
@@ -2870,7 +2876,7 @@ export function AEDataConfig({
                               setLinkInput("");
                               setLinkDialogOpen(true);
                             }}
-                            className="p-1.5 rounded-xl bg-blue-50 border border-blue-100 text-blue-500 hover:bg-blue-100 transition-colors shrink-0"
+                            className="p-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-500 hover:bg-blue-100 transition-colors shrink-0"
                             title="Dán link Google Sheet"
                           >
                             <LinkIcon className="w-4 h-4" />
@@ -2878,7 +2884,7 @@ export function AEDataConfig({
 
                           <button
                             onClick={() => downloadRowFile(row)}
-                            className="p-1.5 rounded-xl bg-teal-50 border border-teal-100 text-teal-600 hover:bg-teal-100 transition-colors shrink-0"
+                            className="p-1.5 rounded-full bg-teal-50 border border-teal-100 text-teal-600 hover:bg-teal-100 transition-colors shrink-0"
                             title="Tải file về máy / Tải file mẫu"
                           >
                             <Download className="w-4 h-4" />
@@ -2892,7 +2898,7 @@ export function AEDataConfig({
                                   rowId: row.id,
                                 })
                               }
-                              className="p-1.5 border border-primary/10 rounded-xl bg-card text-card-foreground text-primary hover:bg-primary/5 transition-all shadow-sm shrink-0"
+                              className="p-1.5 border border-primary/10 rounded-full bg-card text-card-foreground text-primary hover:bg-primary/5 transition-all shadow-sm shrink-0"
                               title="Cấu hình Mapping Cột"
                             >
                               <Wrench className="w-4 h-4" />
@@ -2941,7 +2947,7 @@ export function AEDataConfig({
                       <td className="px-3 py-2 text-center border-b border-[#E2E8F0] min-w-[60px]">
                         <button
                           onClick={() => deleteRow(row.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-xl transition-all"
+                          className="p-1.5 text-rose-500 hover:bg-rose-500/10 rounded-full transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -2955,7 +2961,7 @@ export function AEDataConfig({
         </div>
 
         {/* Integrated Pagination */}
-        <div className="px-6 py-4 border-t border-primary/5 bg-transparent flex items-center justify-between shrink-0">
+        <div className="table-footer-pagination flex min-h-[52px] shrink-0 items-center justify-between border-t border-border bg-card px-4 py-2">
           <div className="flex items-center gap-3">
             <button
               onClick={() => processAEData()}
@@ -2984,9 +2990,9 @@ export function AEDataConfig({
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="h-[35px] w-[35px] flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-xl disabled:opacity-30 transition-all border border-primary/10"
+              className="h-7 w-7 flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-full disabled:opacity-30 transition-all border border-primary/10"
             >
-              <ChevronLeft className="w-5 h-5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
             <div className="flex items-center gap-1">
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -3000,7 +3006,7 @@ export function AEDataConfig({
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
-                    className={`h-[35px] w-[35px] flex items-center justify-center rounded-xl font-bold text-[0.625rem] transition-all border ${currentPage === pageNum ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" : "text-primary/60 hover:bg-primary/10 border-primary/10"}`}
+                    className={`h-7 w-7 flex items-center justify-center rounded-full font-bold text-[0.625rem] transition-all border ${currentPage === pageNum ? "bg-primary text-primary-foreground border-primary shadow-sm" : "text-primary/60 hover:bg-primary/10 border-primary/10"}`}
                   >
                     {pageNum}
                   </button>
@@ -3012,9 +3018,9 @@ export function AEDataConfig({
                 setCurrentPage((prev) => Math.min(prev + 1, totalPages))
               }
               disabled={currentPage === totalPages}
-              className="h-[35px] w-[35px] flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-xl disabled:opacity-30 transition-all border border-primary/10"
+              className="h-7 w-7 flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-full disabled:opacity-30 transition-all border border-primary/10"
             >
-              <ChevronRight className="w-5 h-5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>

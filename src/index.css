@@ -1557,6 +1557,37 @@ div.audit-data-table-wrapper {
   margin: 0 !important;
 }
 
+/* Master follows the compact Timesheet visual rhythm without changing table logic. */
+.page-master-config .master-config-table thead th {
+  padding: 6px 10px !important;
+  background: var(--table-header-bg, #f1f5f9) !important;
+  color: var(--accent, var(--primary, #781d1d)) !important;
+  border-color: #e2e8f0 !important;
+  font-size: 10px !important;
+  line-height: 14px !important;
+  letter-spacing: 0.06em !important;
+}
+
+.page-master-config .master-config-table tbody tr,
+.page-master-config .master-config-table tbody td {
+  background: var(--card, #ffffff) !important;
+}
+
+.page-master-config .master-config-table tbody td {
+  border-color: #e2e8f0 !important;
+  font-size: var(--font-size, 13px) !important;
+}
+
+.page-master-ae .unified-table-frame-header {
+  min-height: 56px !important;
+  background: color-mix(in srgb, var(--primary, #781d1d) 3.5%, var(--card, #ffffff)) !important;
+}
+
+.page-master-ae .unified-table-frame-footer,
+.page-master-ae .table-footer-pagination {
+  background: var(--card, #ffffff) !important;
+}
+
 /* The middle region never owns a frame; the parent shell owns the outside border. */
 .unified-table-frame .table-body-region,
 .unified-table-frame > .table-body-region {
@@ -1641,7 +1672,6 @@ div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-
 div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > button:nth-of-type(1) {
   height: 26.9853px !important;
 }
-
 
 
 
