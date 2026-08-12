@@ -64,7 +64,7 @@ const pageTabs: Record<string, { id: string; label: string; icon: React.ElementT
   ],
   "/master-ae": [
     { id: "Sheet1_AE", label: "Gross Pay", icon: Database },
-    { id: "Hold_AE", label: "DEDUCTIONS", icon: Database },
+    { id: "Hold_AE", label: "deductions", icon: Database },
     { id: "BulkPayment", label: "Bulk Payment", icon: Wallet },
     { id: "Pivot", label: "Pivot Master", icon: FileText },
     { id: "upload", label: "Cài đặt & Tải file (Master)", icon: UploadCloud },
@@ -200,15 +200,7 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
                     className="flex items-center gap-2 h-8 text-primary hover:text-slate-900 transition-all group font-black lowercase tracking-[0.05em] cursor-pointer active:scale-95 px-2 outline-none focus:outline-none focus-visible:outline-none"
                     style={{ fontSize: "11px" }}
                   >
-                    <span
-                      style={{
-                        fontSize: "12px",
-                        textTransform:
-                          currentPageLabel === "DEDUCTIONS"
-                            ? "uppercase"
-                            : undefined,
-                      }}
-                    >
+                    <span style={{ fontSize: "12px" }}>
                       {currentPageLabel}
                     </span>
                     <ChevronDown className="w-3 h-3 opacity-40" />
@@ -218,10 +210,6 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
                   {pageTabs[lookupPath].map((t) => (
                     <DropdownMenuItem
                       key={t.id}
-                      style={{
-                        textTransform:
-                          t.id === "Hold_AE" ? "uppercase" : undefined,
-                      }}
                       onSelect={() => {
                         if (lookupPath === "/centers") {
                            window.dispatchEvent(new CustomEvent("timesheet-request-tab-change", { detail: { tab: t.id } }));

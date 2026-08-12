@@ -1529,6 +1529,25 @@ export function PivotSheet() {
     rowsPerPage === Infinity
       ? sortedFlatRows
       : sortedFlatRows.slice(startIndex, endIndex);
+  const buSubtotals = new Map<
+    string,
+    { values: number[]; rowTotal: number }
+  >();
+  allFlatRows.forEach((row) => {
+    const subtotal = buSubtotals.get(row.bu) || {
+      values: new Array(safeTypeColumns.length).fill(0),
+      rowTotal: 0,
+    };
+    row.values.forEach((value, index) => {
+      subtotal.values[index] += value;
+    });
+    subtotal.rowTotal += row.rowTotal;
+    buSubtotals.set(row.bu, subtotal);
+  });
+  const lastRowIdByBu = new Map<string, number>();
+  sortedFlatRows.forEach((row) => {
+    lastRowIdByBu.set(row.bu, row.globalRowId);
+  });
   const displayedRangeStart = totalRowsCount === 0 ? 0 : startIndex + 1;
   const pivotLabelColumnSpan = ["no", "business", "charge", "month"].filter(
     (key) => !hiddenColumns[key],
@@ -1545,14 +1564,16 @@ export function PivotSheet() {
       );
     }
 
-    return paginatedRows.map((item, idx) => {
+    return paginatedRows.map((item) => {
       const isEditingThisRow = editingCell?.bu === item.bu && editingCell?.l07 === item.l07 && editingCell?.month === item.month;
+      const showBuSubtotal = lastRowIdByBu.get(item.bu) === item.globalRowId;
+      const buSubtotal = buSubtotals.get(item.bu);
 
       return (
-        <tr 
-          key={`${item.bu}-${item.l07}-${item.month}`} 
-          className="transition-colors border-b border-[#e7dbdc] bg-[var(--card,#fff)] hover:bg-primary/[0.025]"
-        >
+        <React.Fragment key={`${item.bu}-${item.l07}-${item.month}`}>
+          <tr
+            className="transition-colors border-b border-[#e7dbdc] bg-[var(--card,#fff)] hover:bg-primary/[0.025]"
+          >
           {!hiddenColumns.no && (
             <td 
               style={{ width: columnWidths["no"] || 50, minWidth: columnWidths["no"] || 50, maxWidth: columnWidths["no"] || 50 }}
@@ -1680,7 +1701,47 @@ export function PivotSheet() {
               {item.rowTotal ? formatNumber(item.rowTotal) : "0"}
             </td>
           )}
-        </tr>
+          </tr>
+          {showBuSubtotal && buSubtotal && (
+            <tr className="border-b border-primary/20 bg-primary/[0.045] text-primary">
+              {pivotLabelColumnSpan > 0 && (
+                <td
+                  colSpan={pivotLabelColumnSpan}
+                  className="border-r border-[#e7dbdc] px-2.5 py-2 text-left text-xs"
+                >
+                  TỔNG CỘNG {item.bu}
+                </td>
+              )}
+              {buSubtotal.values.map((value, index) => {
+                const type = safeTypeColumns[index];
+                if (hiddenColumns[`type_${type}`]) return null;
+                const colKey = `type_${type}`;
+                const width = columnWidths[colKey] || 120;
+                return (
+                  <td
+                    key={`${item.bu}-${type}`}
+                    style={{ width, minWidth: width, maxWidth: width }}
+                    className="border-r border-[#e7dbdc] px-2.5 py-2 text-right font-mono text-xs"
+                  >
+                    {value ? formatNumber(value) : "0"}
+                  </td>
+                );
+              })}
+              {!hiddenColumns.grandTotal && (
+                <td
+                  style={{
+                    width: columnWidths["grandTotal"] || 140,
+                    minWidth: columnWidths["grandTotal"] || 140,
+                    maxWidth: columnWidths["grandTotal"] || 140,
+                  }}
+                  className="bg-primary/[0.055] px-3 py-2 text-right font-mono text-xs"
+                >
+                  {buSubtotal.rowTotal ? formatNumber(buSubtotal.rowTotal) : "0"}
+                </td>
+              )}
+            </tr>
+          )}
+        </React.Fragment>
       );
     });
   };

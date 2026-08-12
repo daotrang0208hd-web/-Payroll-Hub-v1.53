@@ -266,7 +266,7 @@ export function MasterAE() {
     () =>
       [
         { id: "Sheet1_AE", label: "Gross Pay", icon: FileText },
-        { id: "Hold_AE", label: "DEDUCTIONS", icon: PauseCircle },
+        { id: "Hold_AE", label: "deductions", icon: PauseCircle },
         { id: "BulkPayment", label: "Bulk Payment", icon: CreditCard },
         { id: "Pivot", label: "Pivot Master", icon: Table2 },
       ] as const,
@@ -1005,9 +1005,9 @@ export function MasterAE() {
                                      <button
                                        className="group flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
                                        title="Cài đặt & Thao tác"
+                                       aria-label="Mở cài đặt và thao tác bảng Master"
                                      >
                                        <Settings className="h-3.5 w-3.5 text-primary transition-transform duration-300 group-hover:rotate-45" />
-                                       <span className="hidden text-[10px] font-bold uppercase tracking-wide sm:inline">CÀI ĐẶT</span>
                                        <ChevronDown className="h-3 w-3 text-muted-foreground" />
                                      </button>
                                    </DropdownMenuTrigger>

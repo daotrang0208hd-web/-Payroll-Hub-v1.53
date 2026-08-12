@@ -1539,8 +1539,6 @@ export function AEDataConfig({
 
                     if (!idVal && !nameVal && numTP === 0) continue;
                     
-                    if (!accVal && !rowShouldNegate) continue;
-
                     holdData.push({
                       "No.": holdData.length + 1,
                       "ID Number": idVal,
@@ -1631,8 +1629,6 @@ export function AEDataConfig({
                         accVal = Number(row[cBank]).toLocaleString("fullwide", { useGrouping: false });
                       }
                     }
-
-                    if (!accVal && !rowShouldNegate) continue;
 
                     holdData.push({
                       "No.": holdData.length + 1,
@@ -2585,7 +2581,6 @@ export function AEDataConfig({
                     aria-label="Mở cài đặt Master"
                   >
                     <Settings className="h-3.5 w-3.5 shrink-0 text-primary transition-transform duration-300 group-hover:rotate-45" />
-                    <span className="hidden select-none text-[10px] font-bold uppercase tracking-wide sm:inline">CÀI ĐẶT</span>
                     <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                   </button>
                 </DropdownMenuTrigger>

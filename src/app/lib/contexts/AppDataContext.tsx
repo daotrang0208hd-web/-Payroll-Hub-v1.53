@@ -14,6 +14,7 @@ import { AppData } from "../../types";
 import { INITIAL_APP_DATA } from "../../constants/initial-data";
 import { parseMoneyToNumber, removeVietnameseTones, formatIdNumber } from "../utils/data-utils";
 import { resolveL07BuFromAeCode } from "../utils/center-utils";
+import { fillMissingHoldBankAccounts } from "../utils/bank-account-resolver";
 
 // Configure localforage
 localforage.config({
@@ -345,6 +346,45 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   // ── Memoized context values — only re-create when actual data changes ──
   const { Hold_AE, Sheet1_AE, globalMonth } = state.present;
+
+  // Persist missing Hold AE bank accounts as soon as the matching source data
+  // is available. This keeps the lookup result across report-month changes and
+  // future uploads where a source file may be omitted.
+  useEffect(() => {
+    if (isLoading) return;
+
+    setState((prev) => {
+      const holdRows = prev.present.Hold_AE?.data || [];
+      const { rows, updatedCount } = fillMissingHoldBankAccounts({
+        holdRows,
+        grossPayRows: prev.present.Sheet1_AE?.data || [],
+        transactionRows: [
+          ...(prev.present.BankExport?.data || []),
+          ...(prev.present.Bank_North_AE?.data || []),
+        ],
+        reportMonth: prev.present.globalMonth,
+      });
+
+      if (updatedCount === 0) return prev;
+      return {
+        ...prev,
+        present: {
+          ...prev.present,
+          Hold_AE: {
+            ...prev.present.Hold_AE,
+            data: rows,
+          },
+        },
+      };
+    });
+  }, [
+    isLoading,
+    state.present.Hold_AE?.data,
+    state.present.Sheet1_AE?.data,
+    state.present.BankExport?.data,
+    state.present.Bank_North_AE?.data,
+    state.present.globalMonth,
+  ]);
 
   const computedHoldAE = useMemo(() => {
     if (!Hold_AE || !Hold_AE.data) return Hold_AE;

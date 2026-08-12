@@ -693,9 +693,9 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
                 <button
                   className="group flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
                   title="Cài đặt & Thao tác"
+                  aria-label="Mở cài đặt và thao tác bảng Deductions"
                 >
                   <Settings className="h-3.5 w-3.5 text-primary transition-transform duration-300 group-hover:rotate-45" />
-                  <span className="hidden text-[10px] font-bold uppercase tracking-wide sm:inline">CÀI ĐẶT</span>
                   <ChevronDown className="h-3 w-3 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
