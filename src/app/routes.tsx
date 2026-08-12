@@ -5,6 +5,11 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: Root,
+    HydrateFallback: () => (
+      <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        Đang tải giao diện...
+      </div>
+    ),
     children: [
       {
         index: true,

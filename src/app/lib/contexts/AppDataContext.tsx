@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import { DEFAULT_CENTERS } from "../../constants";
 import localforage from "localforage";
@@ -23,6 +24,24 @@ localforage.config({
 });
 
 const STORAGE_KEY = "PayrollApp_Data";
+const STORAGE_META_KEY = `${STORAGE_KEY}:meta`;
+const SPLIT_STORAGE_FIELDS = [
+  "Timesheet_Roster",
+  "Master_Roster",
+  "Q_Staff",
+  "Q_Salary_Scale",
+  "Q_Cache",
+  "Timesheets",
+  "Q_CheckTAs",
+  "Q_TeacherHours",
+  "Q_BonusData",
+  "Timesheet_RosterEditHistory",
+  "TA_Employee_Summary",
+  "TA_Center_Summary",
+] as const satisfies readonly (keyof AppData)[];
+
+const getSplitStorageKey = (field: keyof AppData) =>
+  `${STORAGE_KEY}:data:${field}`;
 
 // ─── Split into 2 contexts to avoid re-rendering data consumers on meta changes ───
 
@@ -60,6 +79,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const persistedSplitRefs = useRef(
+    new Map<keyof AppData, AppData[keyof AppData]>(),
+  );
 
   // ── Load from storage on mount ──
   useEffect(() => {
@@ -76,6 +98,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
               console.error("Failed to parse legacy data", e);
             }
           }
+        }
+
+        const savedMetadata =
+          await localforage.getItem<Partial<AppData>>(STORAGE_META_KEY);
+        if (saved || savedMetadata) {
+          saved = {
+            ...INITIAL_APP_DATA,
+            ...(saved || {}),
+            ...(savedMetadata || {}),
+          } as AppData;
+
+          const splitValues = await Promise.all(
+            SPLIT_STORAGE_FIELDS.map((field) =>
+              localforage.getItem<AppData[typeof field]>(
+                getSplitStorageKey(field),
+              ),
+            ),
+          );
+          SPLIT_STORAGE_FIELDS.forEach((field, index) => {
+            const splitValue = splitValues[index];
+            if (splitValue !== null && splitValue !== undefined) {
+              (saved as any)[field] = splitValue;
+            }
+          });
         }
 
         if (saved) {
@@ -142,6 +188,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           delete legacySaved.Q_Roster;
           delete legacySaved.Q_RosterFileName;
           delete legacySaved.Q_RosterEditHistory;
+
+          SPLIT_STORAGE_FIELDS.forEach((field) => {
+            persistedSplitRefs.current.set(field, saved?.[field]);
+          });
 
           // --- MIGRATION FOR HOLD_AE ---
           if (saved.Hold_AE) {
@@ -279,6 +329,10 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
               ...saved,
             },
           }));
+        } else {
+          SPLIT_STORAGE_FIELDS.forEach((field) => {
+            persistedSplitRefs.current.set(field, INITIAL_APP_DATA[field]);
+          });
         }
       } catch (e) {
         console.error("Failed to load app data from storage", e);
@@ -297,7 +351,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     const saveData = async () => {
       setIsSyncing(true);
       try {
-        const dataToSave = { ...state.present };
+        const dataToSave: Partial<AppData> = { ...state.present };
         const stripFileObj = (item: any) => {
           const { fileObj, _file, ...rest } = item;
           return rest;
@@ -308,7 +362,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         if (dataToSave.Ae_Global_Inputs)
           dataToSave.Ae_Global_Inputs =
             dataToSave.Ae_Global_Inputs.map(stripFileObj);
-        await localforage.setItem(STORAGE_KEY, dataToSave);
+
+        // Persist large collections only when their reference changed. A
+        // metadata-only update (tab, date, UI setting, input status) must not
+        // structured-clone hundreds of thousands of rows on the main thread.
+        for (const field of SPLIT_STORAGE_FIELDS) {
+          const value = state.present[field];
+          if (persistedSplitRefs.current.get(field) !== value) {
+            await localforage.setItem(getSplitStorageKey(field), value);
+            persistedSplitRefs.current.set(field, value);
+          }
+          delete (dataToSave as any)[field];
+        }
+        await localforage.setItem(STORAGE_META_KEY, dataToSave);
       } catch (e) {
         console.error("Failed to save app data to storage", e);
         try {

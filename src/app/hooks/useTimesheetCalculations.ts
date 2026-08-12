@@ -63,7 +63,7 @@ export function useTimesheetCalculations(
   const timesheetInputMetadataKey = (appData?.Timesheet_InputList || [])
     .map(
       (row: any) =>
-        `${row.id || ""}|${row.l07 || ""}|${row.aeCode || ""}|${row.bus || ""}`,
+        `${row.id || ""}|${row.l07 || ""}|${row.aeCode || ""}|${row.bus || ""}|${(row.legacyRowIds || []).join(",")}`,
     )
     .join("||");
   const timesheetInputMetadata = useMemo(
@@ -73,6 +73,7 @@ export function useTimesheetCalculations(
         l07: row.l07,
         aeCode: row.aeCode,
         bus: row.bus,
+        legacyRowIds: row.legacyRowIds || [],
       })),
     [appData?.Timesheet_InputList],
   );
@@ -109,6 +110,8 @@ export function useTimesheetCalculations(
   }, [checkTAsData, preferredYear]);
 
   useEffect(() => {
+    let inputSendTimer: ReturnType<typeof setTimeout> | undefined;
+
     if (rosterData.length === 0) {
       // Clear cache when roster is empty
       globalWorkerCacheKey = "";
@@ -183,12 +186,17 @@ export function useTimesheetCalculations(
     };
 
     try {
-      workerRef.current = new TimesheetWorker();
-      workerRef.current.onmessage = (e) => {
-        const resultData = e.data || {};
-        if (resultData.error) {
-          console.error("Timesheet worker error string:", resultData.error);
-        }
+      const worker = new TimesheetWorker();
+      workerRef.current = worker;
+      const requestId = crypto.randomUUID();
+      const chunkedResult: Record<string, any[]> = {
+        processedRosterData: [],
+        employeeSummary: [],
+        centerSummary: [],
+      };
+      let chunkedError: string | undefined;
+
+      const commitWorkerResult = (resultData: any) => {
         const finalResult = {
           processedRosterData: resultData.processedRosterData || [],
           employeeSummary: resultData.employeeSummary || [],
@@ -200,7 +208,36 @@ export function useTimesheetCalculations(
         globalWorkerCacheResult = finalResult;
         setResult(finalResult);
       };
-      workerRef.current.onerror = (err) => {
+
+      worker.onmessage = (e) => {
+        const resultData = e.data || {};
+        if (resultData.requestId && resultData.requestId !== requestId) return;
+
+        if (resultData.type === "timesheet-result-start") {
+          chunkedError = resultData.error;
+          return;
+        }
+
+        if (resultData.type === "timesheet-result-chunk") {
+          const target = chunkedResult[resultData.field];
+          if (target && Array.isArray(resultData.rows)) {
+            target.push(...resultData.rows);
+          }
+          return;
+        }
+
+        if (resultData.type === "timesheet-result-complete") {
+          commitWorkerResult({ ...chunkedResult, error: chunkedError });
+          return;
+        }
+
+        // Backwards-compatible fallback for an older cached worker bundle.
+        if (resultData.error) {
+          console.error("Timesheet worker error string:", resultData.error);
+        }
+        commitWorkerResult(resultData);
+      };
+      worker.onerror = (err) => {
         console.error("Timesheet worker error:", err);
         setResult((prev: any) => ({
           ...prev,
@@ -210,7 +247,55 @@ export function useTimesheetCalculations(
             "Không thể tính Timesheet trong Worker. Vui lòng tải lại trang và thử lại.",
         }));
       };
-      workerRef.current.postMessage(params);
+      const inputFields = [
+        "rosterData",
+        "salaryScaleData",
+        "staffData",
+        "cacheData",
+      ] as const;
+      const workerParams = {
+        ...params,
+        rosterData: undefined,
+        salaryScaleData: undefined,
+        staffData: undefined,
+        cacheData: undefined,
+      };
+      const inputChunkSize = 2_000;
+      let fieldIndex = 0;
+      let rowOffset = 0;
+
+      worker.postMessage({
+        type: "timesheet-input-start",
+        requestId,
+        params: workerParams,
+      });
+
+      const sendNextInputChunk = () => {
+        if (workerRef.current !== worker) return;
+        if (fieldIndex >= inputFields.length) {
+          worker.postMessage({ type: "timesheet-input-complete", requestId });
+          return;
+        }
+
+        const field = inputFields[fieldIndex];
+        const rows = params[field] || [];
+        if (rowOffset >= rows.length) {
+          fieldIndex += 1;
+          rowOffset = 0;
+          inputSendTimer = setTimeout(sendNextInputChunk, 0);
+          return;
+        }
+
+        worker.postMessage({
+          type: "timesheet-input-chunk",
+          requestId,
+          field,
+          rows: rows.slice(rowOffset, rowOffset + inputChunkSize),
+        });
+        rowOffset += inputChunkSize;
+        inputSendTimer = setTimeout(sendNextInputChunk, 0);
+      };
+      inputSendTimer = setTimeout(sendNextInputChunk, 0);
     } catch (workerError) {
       console.error("Failed to instantiate TimesheetWorker:", workerError);
       setResult((prev: any) => ({
@@ -224,6 +309,7 @@ export function useTimesheetCalculations(
     }
 
     return () => {
+      if (inputSendTimer) clearTimeout(inputSendTimer);
       if (workerRef.current) {
         workerRef.current.terminate();
       }

@@ -807,23 +807,17 @@ export function MasterAE() {
   }, [activeTab, view]);
 
   useEffect(() => {
-    const handleTabRequest = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail && detail.tab) setActiveTab(detail.tab as MasterAETab);
-    };
     const handleUploadRequest = () => setView("upload");
     const handleRefreshRequest = () => handleRefreshData();
     const handleExportRequest = () => handleExportExcel();
     const handleClearRequest = () => setShowClearDialog(true);
 
-    window.addEventListener("master-ae-request-tab-change", handleTabRequest);
     window.addEventListener("master-ae-request-upload", handleUploadRequest);
     window.addEventListener("master-ae-request-refresh", handleRefreshRequest);
     window.addEventListener("master-ae-request-export", handleExportRequest);
     window.addEventListener("master-ae-request-clear", handleClearRequest);
 
     return () => {
-      window.removeEventListener("master-ae-request-tab-change", handleTabRequest);
       window.removeEventListener("master-ae-request-upload", handleUploadRequest);
       window.removeEventListener("master-ae-request-refresh", handleRefreshRequest);
       window.removeEventListener("master-ae-request-export", handleExportRequest);

@@ -367,16 +367,15 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
       const validRows = rows.filter((row) => !isFileNameStoredAsL07(row));
       const replacementByTargetId = new Map<string, (typeof rows)[number]>();
-      const targetIdBySourceId = new Map<string, string>();
-      const preferredSourceIdByTargetId = new Map<string, string>();
       const removableIds = new Set<string>();
 
       malformedRows.forEach((row) => {
         if (!row.fileName) return;
         const target = resolveTimesheetCenterFromFileName(row.fileName, validRows);
         if (!target) return;
+        const currentTarget = replacementByTargetId.get(target.id) || target;
         replacementByTargetId.set(target.id, {
-          ...target,
+          ...currentTarget,
           url: row.url || target.url,
           fileName: row.fileName,
           sheetName: row.sheetName || target.sheetName,
@@ -384,9 +383,13 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           count: row.count,
           date: row.date,
           columnMapping: row.columnMapping || target.columnMapping,
+          legacyRowIds: Array.from(
+            new Set([
+              ...(currentTarget.legacyRowIds || []),
+              row.id,
+            ]),
+          ),
         });
-        targetIdBySourceId.set(row.id, target.id);
-        preferredSourceIdByTargetId.set(target.id, row.id);
         removableIds.add(row.id);
       });
 
@@ -394,29 +397,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       const nextInputs = rows
         .filter((row) => !removableIds.has(row.id))
         .map((row) => replacementByTargetId.get(row.id) || row);
-      const repairDataRows = (data: Record<string, unknown>[] = []) => {
-        const targetIds = new Set(preferredSourceIdByTargetId.keys());
-        const preferredSourceIds = new Set(preferredSourceIdByTargetId.values());
-        return data
-          .filter((row) => {
-            const rowId = String(row._rowId || "");
-            if (targetIds.has(rowId)) return false;
-            return !targetIdBySourceId.has(rowId) || preferredSourceIds.has(rowId);
-          })
-          .map((row) => {
-            const sourceId = String(row._rowId || "");
-            const targetId = targetIdBySourceId.get(sourceId);
-            return targetId ? { ...row, _rowId: targetId } : row;
-          });
-      };
 
       return {
         ...prev,
         Timesheet_InputList: nextInputs,
-        Timesheet_Roster: repairDataRows(prev.Timesheet_Roster),
-        Q_Salary_Scale: repairDataRows(prev.Q_Salary_Scale),
-        Q_Staff: repairDataRows(prev.Q_Staff),
-        Q_Cache: repairDataRows(prev.Q_Cache),
       };
     }, false);
   }, [updateAppData]);
@@ -463,9 +447,12 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     );
   };
   const handleClearRow = (id: string) => {
-    updateAppData((prev) => ({
-      ...prev,
-      Timesheet_InputList: (prev.Timesheet_InputList || []).map((r) =>
+    updateAppData((prev) => {
+      const targetRow = (prev.Timesheet_InputList || []).find((r) => r.id === id);
+      const ownedRowIds = new Set([id, ...(targetRow?.legacyRowIds || [])]);
+      return {
+        ...prev,
+        Timesheet_InputList: (prev.Timesheet_InputList || []).map((r) =>
         r.id === id
           ? {
               ...r,
@@ -476,16 +463,24 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               count: undefined,
               date: undefined,
               columnMapping: undefined,
+              legacyRowIds: [],
             }
           : r,
-      ),
-      Timesheet_Roster: (prev.Timesheet_Roster || []).filter(
-        (r) => r._rowId !== id,
-      ),
-      Q_Salary_Scale: (prev.Q_Salary_Scale || []).filter((r) => r._rowId !== id),
-      Q_Staff: (prev.Q_Staff || []).filter((r) => r._rowId !== id),
-      Q_Cache: (prev.Q_Cache || []).filter((r) => r._rowId !== id),
-    }));
+        ),
+        Timesheet_Roster: (prev.Timesheet_Roster || []).filter(
+          (r) => !ownedRowIds.has(String(r._rowId || "")),
+        ),
+        Q_Salary_Scale: (prev.Q_Salary_Scale || []).filter(
+          (r) => !ownedRowIds.has(String(r._rowId || "")),
+        ),
+        Q_Staff: (prev.Q_Staff || []).filter(
+          (r) => !ownedRowIds.has(String(r._rowId || "")),
+        ),
+        Q_Cache: (prev.Q_Cache || []).filter(
+          (r) => !ownedRowIds.has(String(r._rowId || "")),
+        ),
+      };
+    });
   };
   const handleClearAll = () => {
     updateAppData((prev) => ({
@@ -499,6 +494,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         count: undefined,
         date: undefined,
         columnMapping: undefined,
+        legacyRowIds: [],
       })),
       Timesheet_Roster: [],
       Q_Salary_Scale: [],
@@ -704,10 +700,17 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
          updateAppData((prev) => {
             const next = { ...prev };
+            const currentRow = (prev.Timesheet_InputList || []).find(
+              (input) => input.id === id,
+            );
+            const ownedRowIds = new Set([
+              id,
+              ...(currentRow?.legacyRowIds || []),
+            ]);
             
             // Remove existing roster rows for this rowId OR for this center/aeCode to overwrite and prevent duplicate entries
             next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
-              if (r._rowId === id) return false;
+              if (ownedRowIds.has(String(r._rowId || ""))) return false;
               if (targetL07Lower) {
                 const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
                 const rAe = String(r.aeCode || "").trim().toLowerCase();
@@ -734,7 +737,8 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
                 count: mapped.length, 
                 date: displayDate, 
                 fileName: file.name,
-                url: finalUrl
+                url: finalUrl,
+                legacyRowIds: [],
               } : r
             );
             next.Timesheet_InputList = newList;
@@ -839,11 +843,16 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
       results.forEach((result) => {
         const input = updatedInputs.find((row) => row.id === result.id);
+        if (!result.parsed) return;
+        const ownedRowIds = new Set([
+          result.id,
+          ...(input?.legacyRowIds || []),
+        ]);
         const targetL07 = String(input?.l07 || "").trim().toLowerCase();
         const targetAe = String(input?.aeCode || "").trim().toLowerCase();
 
         nextRoster = nextRoster.filter((row: Record<string, unknown>) => {
-          if (row._rowId === result.id) return false;
+          if (ownedRowIds.has(String(row._rowId || ""))) return false;
           if (!targetL07) return true;
           const rowCenter = String(
             row.charge_to_center_mkt || row.l07 || "",
@@ -852,16 +861,18 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           return rowCenter !== targetL07 && (!targetAe || rowAe !== targetAe);
         });
         nextSalary = nextSalary.filter(
-          (row: Record<string, unknown>) => row._rowId !== result.id,
+          (row: Record<string, unknown>) =>
+            !ownedRowIds.has(String(row._rowId || "")),
         );
         nextStaff = nextStaff.filter(
-          (row: Record<string, unknown>) => row._rowId !== result.id,
+          (row: Record<string, unknown>) =>
+            !ownedRowIds.has(String(row._rowId || "")),
         );
         nextCache = nextCache.filter(
-          (row: Record<string, unknown>) => row._rowId !== result.id,
+          (row: Record<string, unknown>) =>
+            !ownedRowIds.has(String(row._rowId || "")),
         );
 
-        if (!result.parsed) return;
         if (result.parsed.kind === "salary") {
           nextSalary = nextSalary.concat(result.parsed.rows);
         } else if (result.parsed.kind === "staff") {
@@ -894,6 +905,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           count: result.parsed?.rows.length || 0,
           fileName: result.file.name,
           date: dateLabel,
+          legacyRowIds: result.parsed ? [] : input.legacyRowIds,
         };
       });
 
@@ -947,6 +959,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           const next = { ...prev };
           
           const targetRow = (prev.Timesheet_InputList || []).find(r => r.id === rowId);
+          const ownedRowIds = new Set([
+            rowId,
+            ...(targetRow?.legacyRowIds || []),
+          ]);
           const detectedL07 = getL07FromFileName(file.name);
           const finalL07 = targetRow?.l07 || detectedL07 || "";
           const centerInfo = finalL07 ? getCenterInfoByL07(finalL07) : null;
@@ -954,7 +970,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           const aeCodeLower = (targetRow?.aeCode || centerInfo?.aeCode || "").trim().toLowerCase();
 
           next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
-            if (r._rowId === rowId) return false;
+            if (ownedRowIds.has(String(r._rowId || ""))) return false;
             if (targetL07Lower) {
               const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
               const rAe = String(r.aeCode || "").trim().toLowerCase();
@@ -963,9 +979,18 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             }
             return true;
           });
-          next.Q_Salary_Scale = (next.Q_Salary_Scale || []).filter((r: Record<string, unknown>) => r._rowId !== rowId);
-          next.Q_Staff = (next.Q_Staff || []).filter((r: Record<string, unknown>) => r._rowId !== rowId);
-          next.Q_Cache = (next.Q_Cache || []).filter((r: Record<string, unknown>) => r._rowId !== rowId);
+          next.Q_Salary_Scale = (next.Q_Salary_Scale || []).filter(
+            (r: Record<string, unknown>) =>
+              !ownedRowIds.has(String(r._rowId || "")),
+          );
+          next.Q_Staff = (next.Q_Staff || []).filter(
+            (r: Record<string, unknown>) =>
+              !ownedRowIds.has(String(r._rowId || "")),
+          );
+          next.Q_Cache = (next.Q_Cache || []).filter(
+            (r: Record<string, unknown>) =>
+              !ownedRowIds.has(String(r._rowId || "")),
+          );
 
           if (parsed.kind === "salary")
             next.Q_Salary_Scale = next.Q_Salary_Scale.concat(allRows);
@@ -994,6 +1019,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
                   date:
                     sourceMetadata?.uploadDate ||
                     `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getDate()}/${d.getMonth() + 1}`,
+                  legacyRowIds: [],
                 }
               : input
           );

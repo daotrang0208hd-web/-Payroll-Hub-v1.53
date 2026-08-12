@@ -39,6 +39,7 @@ export interface TimesheetInputRow {
   count?: number;
   date?: string;
   columnMapping?: Record<string, string>;
+  legacyRowIds?: string[];
 }
 
 function getSyncDateInfo(dateStr?: string) {

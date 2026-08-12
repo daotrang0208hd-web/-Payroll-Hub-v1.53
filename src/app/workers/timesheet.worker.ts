@@ -61,9 +61,19 @@ export function calculateTimesheet(params: any) {
     if (sn) salaryScaleLookup.set(sn, s);
   });
 
-  const inputListLookup = new Map(
-    (appData?.Timesheet_InputList || []).map((ir: any) => [ir.id, ir])
-  );
+  const inputListLookup = new Map();
+  const discardedLegacyRowIds = new Set<string>();
+  (appData?.Timesheet_InputList || []).forEach((ir: any) => {
+    inputListLookup.set(ir.id, ir);
+    const aliases = Array.isArray(ir.legacyRowIds)
+      ? ir.legacyRowIds.filter(Boolean)
+      : [];
+    // If the old folder-import bug generated several rows for one center,
+    // only the newest imported file is authoritative.
+    aliases.slice(0, -1).forEach((id: string) => discardedLegacyRowIds.add(id));
+    const currentAlias = aliases.at(-1);
+    if (currentAlias) inputListLookup.set(currentAlias, ir);
+  });
 
   const cacheCodes = new Set(
     (cacheData || []).map((c: any) => String(getVal(c, ["code", "mã lớp"])).toLowerCase().trim())
@@ -103,6 +113,7 @@ export function calculateTimesheet(params: any) {
   let empSkipped = 0;
 
   rosterData.forEach((t: any) => {
+    if (discardedLegacyRowIds.has(String(t._rowId || ""))) return;
     const configuredInput = inputListLookup.get(t._rowId) as any;
     const configuredL07 = String(configuredInput?.l07 || "").trim();
     const configuredAeCode = String(configuredInput?.aeCode || "").trim();
@@ -675,8 +686,81 @@ export function calculateTimesheet(params: any) {
 }
 
 if (typeof window === "undefined" && typeof self !== "undefined") {
+  const inputFields = [
+    "rosterData",
+    "salaryScaleData",
+    "staffData",
+    "cacheData",
+  ] as const;
+  let pendingInput: {
+    requestId?: string;
+    params: any;
+    data: Record<(typeof inputFields)[number], any[]>;
+  } | null = null;
+
+  const postChunkedResult = (result: any, requestId?: string) => {
+    const resultFields = [
+      "processedRosterData",
+      "employeeSummary",
+      "centerSummary",
+    ] as const;
+    const chunkSize = 2_000;
+
+    self.postMessage({
+      type: "timesheet-result-start",
+      requestId,
+      error: result.error,
+    });
+    resultFields.forEach((field) => {
+      const rows = Array.isArray(result[field]) ? result[field] : [];
+      for (let offset = 0; offset < rows.length; offset += chunkSize) {
+        self.postMessage({
+          type: "timesheet-result-chunk",
+          requestId,
+          field,
+          rows: rows.slice(offset, offset + chunkSize),
+        });
+      }
+    });
+    self.postMessage({ type: "timesheet-result-complete", requestId });
+  };
+
   self.onmessage = (e: MessageEvent) => {
-    const result = calculateTimesheet(e.data);
-    self.postMessage(result);
+    const message = e.data || {};
+
+    if (message.type === "timesheet-input-start") {
+      pendingInput = {
+        requestId: message.requestId,
+        params: message.params || {},
+        data: {
+          rosterData: [],
+          salaryScaleData: [],
+          staffData: [],
+          cacheData: [],
+        },
+      };
+      return;
+    }
+
+    if (message.type === "timesheet-input-chunk") {
+      if (!pendingInput || pendingInput.requestId !== message.requestId) return;
+      const target = pendingInput.data[message.field as (typeof inputFields)[number]];
+      if (target && Array.isArray(message.rows)) target.push(...message.rows);
+      return;
+    }
+
+    if (message.type === "timesheet-input-complete") {
+      if (!pendingInput || pendingInput.requestId !== message.requestId) return;
+      const request = pendingInput;
+      pendingInput = null;
+      postChunkedResult(
+        calculateTimesheet({ ...request.params, ...request.data }),
+        request.requestId,
+      );
+      return;
+    }
+
+    // Backwards-compatible direct calculation path.
+    postChunkedResult(calculateTimesheet(message), message.requestId);
   };
 }
