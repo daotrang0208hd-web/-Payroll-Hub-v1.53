@@ -425,8 +425,14 @@ export function buildBulkPaymentAnalytics({
       buckets.get(key) || createBucket(entry.business, entry.occurrencePeriod);
 
     if (entry.operation === "HOLD") {
-      if (reportCompare < 0) bucket.holdBeforePeriod += entry.amount;
-      else bucket.holdInPeriod += entry.amount;
+      // HOLD phat sinh thuoc ky nao duoc xac dinh boi "Thang phat sinh",
+      // khong phai boi thang bao cao cua dong du lieu. Mot khoan HOLD cu co the
+      // tiep tuc xuat hien trong file cua ky hien tai, nhung no chi la so du dau
+      // ky va tuyet doi khong duoc ghi nhan lai vao HOLD phat sinh tai ky.
+      if (occurrenceCompare < 0) bucket.holdBeforePeriod += entry.amount;
+      else if (occurrenceCompare === 0 && reportCompare === 0) {
+        bucket.holdInPeriod += entry.amount;
+      }
     } else if (entry.operation === "ADD") {
       bucket.addPaymentPeriods.set(entry.reportPeriod.key, entry.reportPeriod);
       if (reportCompare < 0) bucket.addBeforePeriod += entry.amount;
@@ -480,7 +486,12 @@ export function buildBulkPaymentAnalytics({
         "Tháng HOLD": formatPeriod(bucket.occurrencePeriod),
         "Kỳ báo cáo": reportLabel,
         BU: bucket.business,
-        "HOLD phát sinh": bucket.holdInPeriod,
+        // Bao ve quy tac hien thi: cac HOLD co thang phat sinh truoc ky bao cao
+        // luon bang 0 tai nhom III. PHAT SINH TAI KY BAO CAO.
+        "HOLD phát sinh":
+          comparePeriods(bucket.occurrencePeriod, currentPeriod) === 0
+            ? bucket.holdInPeriod
+            : 0,
         "Số dư HOLD đầu kỳ": openingBalance,
         "Thanh toán HOLD tại kỳ": bucket.addInPeriod,
         "Tháng thanh toán tại kỳ":
