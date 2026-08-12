@@ -59,9 +59,6 @@ export function useTimesheetCalculations(
   }
   const preferredYear = uiSettings.defaultAuditYear || (tempFDate ? tempFDate.getFullYear() : new Date().getFullYear());
 
-  const sheet1Data = appData?.Sheet1_AE?.data;
-  const holdData = appData?.Hold_AE?.data;
-  const bankNorthData = appData?.Bank_North_AE?.data;
   const checkTAsData = appData?.Q_CheckTAs;
   const timesheetInputMetadataKey = (appData?.Timesheet_InputList || [])
     .map(
@@ -77,36 +74,14 @@ export function useTimesheetCalculations(
         aeCode: row.aeCode,
         bus: row.bus,
       })),
-    [timesheetInputMetadataKey],
-  );
-
-  const aeConfigData = useMemo(
-    () => [
-      ...(sheet1Data || []),
-      ...(holdData || []),
-      ...(bankNorthData || []),
-    ],
-    [sheet1Data, holdData, bankNorthData],
+    [appData?.Timesheet_InputList],
   );
 
   const { classSizeMap, checkTAsMap } = useMemo(() => {
-    // Basic class map generation logic retained out of worker as it uses specific appData
+    // Class-size inputs are Timesheet-owned. Payroll Master data must never
+    // participate in a Timesheet calculation.
     const csMap: Record<string, number> = {};
     const ctaMap: Record<string, number> = {};
-
-    aeConfigData.forEach((row: any) => {
-      const clsName = String(row["Class Name"] || row["Lớp"] || row["Class"] || row["Mã lớp"] || "").trim();
-      const centerRaw = String(row["Center Name"] || row["Mã AE"] || row["Center"] || row["L07"] || row["Trung tâm"] || row["Center Code"] || "");
-      const numStudents = parseInt(String(row["Number of Student"] || row["Sĩ số"] || row["Sỹ số"] || row["Students"] || row["Số HV"] || row["Số học viên"] || row["Sĩ số lớp"] || row["Total Students"] || row["Số lượng học viên"] || row["Sĩ số thực tế"] || row["Sỹ số thực tế"] || row["Actual Size"] || row["Class Size"] || row["Size"] || row["Số lượng"] || row["Sĩ số cơ sở"] || ""), 10) || 0;
-
-      if (numStudents > 0 && clsName) {
-        const centerL07 = mapL07(centerRaw);
-        const classKey = `${centerL07.replace(/\s+/g, "").toUpperCase()}_${clsName.replace(/\s+/g, "").toUpperCase()}`;
-        if (!csMap[classKey] || csMap[classKey] < numStudents) {
-          csMap[classKey] = numStudents;
-        }
-      }
-    });
 
     const safeCheckTAsData = checkTAsData || [];
     safeCheckTAsData.forEach((row: any) => {
@@ -131,7 +106,7 @@ export function useTimesheetCalculations(
       }
     });
     return { classSizeMap: csMap, checkTAsMap: ctaMap };
-  }, [aeConfigData, checkTAsData, preferredYear]);
+  }, [checkTAsData, preferredYear]);
 
   useEffect(() => {
     if (rosterData.length === 0) {
@@ -166,12 +141,11 @@ export function useTimesheetCalculations(
       from: fromDateStr,
       to: toDateStr,
       year: preferredYear,
-      aeConfigLen: aeConfigData.length,
       rosterRef: getReferenceId(rosterData),
       salaryRef: getReferenceId(salaryScaleData),
       staffRef: getReferenceId(staffData),
       cacheRef: getReferenceId(cacheData),
-      aeConfigRef: getReferenceId(aeConfigData),
+      checkTAsRef: getReferenceId(checkTAsData),
       inputs: timesheetInputMetadataKey,
     });
 
@@ -200,10 +174,9 @@ export function useTimesheetCalculations(
       toDateStr,
       appData: {
         Timesheet_InputList: timesheetInputMetadata,
-        Q_RosterFileName: appData?.Q_RosterFileName,
+        Timesheet_RosterFileName: appData?.Timesheet_RosterFileName,
       },
       preferredYear,
-      aeConfigData,
       checkTAsMap,
       classSizeMap,
       TASK_COLUMNS
@@ -264,11 +237,11 @@ export function useTimesheetCalculations(
     toDateStr,
     classSizeMap,
     checkTAsMap,
-    appData?.Q_RosterFileName,
+    checkTAsData,
+    appData?.Timesheet_RosterFileName,
     timesheetInputMetadata,
     timesheetInputMetadataKey,
     preferredYear,
-    aeConfigData,
   ]);
 
   return result;

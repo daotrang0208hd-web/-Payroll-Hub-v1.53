@@ -376,7 +376,10 @@ export function TimesheetHub() {
         console.log("Supabase data already loaded in this session. Skipping auto-fetch on tab switch.");
         return;
       }
-      if ((appData.Q_Roster && appData.Q_Roster.length > 0) || (appData.Q_Staff && appData.Q_Staff.length > 0)) {
+      if (
+        (appData.Timesheet_Roster && appData.Timesheet_Roster.length > 0) ||
+        (appData.Q_Staff && appData.Q_Staff.length > 0)
+      ) {
         console.log("Local data already exists. Skipping auto-fetch from Supabase to prevent overwriting unsynced local data.");
         hasFetchedSupabase = true;
         return;
@@ -455,7 +458,7 @@ export function TimesheetHub() {
 
         updateAppData((prev) => ({
           ...prev,
-          Q_Roster: mappedRoster,
+          Timesheet_Roster: mappedRoster,
           Q_Staff: mappedStaff,
           Q_Salary_Scale: mappedSalary
         }), false);
@@ -575,7 +578,10 @@ export function TimesheetHub() {
     }, false);
   }, [debouncedFromDate, debouncedToDate, updateAppData]);
 
-  const calculatedRosterData = useMemo(() => appData.Q_Roster || [], [appData.Q_Roster]);
+  const calculatedRosterData = useMemo(
+    () => appData.Timesheet_Roster || [],
+    [appData.Timesheet_Roster],
+  );
   const calculatedSalaryScaleData = useMemo(() => appData.Q_Salary_Scale || [], [appData.Q_Salary_Scale]);
   const calculatedStaffData = useMemo(() => appData.Q_Staff || [], [appData.Q_Staff]);
   const calculatedCacheData = useMemo(() => appData.Q_Cache || [], [appData.Q_Cache]);
@@ -985,7 +991,7 @@ export function TimesheetHub() {
       return;
     }
 
-    const rosterData = appData.Q_Roster || [];
+    const rosterData = appData.Timesheet_Roster || [];
     const staffData = appData.Q_Staff || [];
     const salaryData = appData.Q_Salary_Scale || [];
 
@@ -1067,7 +1073,7 @@ export function TimesheetHub() {
     } finally {
       setIsSyncing(false);
     }
-  }, [appData.Q_Roster, appData.Q_Staff, appData.Q_Salary_Scale, updateAppData]);
+  }, [appData.Timesheet_Roster, appData.Q_Staff, appData.Q_Salary_Scale, updateAppData]);
 
   const tableRef = useRef<any>(null);
 
@@ -1157,7 +1163,7 @@ export function TimesheetHub() {
 
       updateAppData((prev) => ({
         ...prev,
-        Q_Roster: mappedRoster,
+        Timesheet_Roster: mappedRoster,
         Q_Staff: mappedStaff,
         Q_Salary_Scale: mappedSalary,
         updatedAt: new Date().toISOString()
@@ -1234,7 +1240,7 @@ export function TimesheetHub() {
       }
 
       // 4. Sync Rosters
-      const rosterData = INITIAL_APP_DATA.Q_Roster || [];
+      const rosterData = INITIAL_APP_DATA.Timesheet_Roster || [];
       if (rosterData.length > 0) {
         await syncRosterToSupabase(rosterData, () => {});
       }
@@ -1242,7 +1248,7 @@ export function TimesheetHub() {
       // 5. Update Local App Data to match
       updateAppData((prev) => ({
         ...prev,
-        Q_Roster: [...rosterData],
+        Timesheet_Roster: [...rosterData],
         Q_Staff: [...staffData],
         Q_Salary_Scale: [...salaryData],
         Q_Cache: INITIAL_APP_DATA.Q_Cache ? [...INITIAL_APP_DATA.Q_Cache] : [],
@@ -1271,7 +1277,7 @@ export function TimesheetHub() {
 
   const handleRosterCellChange = useCallback((row: any, colKey: string, value: any) => {
     updateAppData((prev) => {
-      const qRoster = prev.Q_Roster || [];
+      const qRoster = prev.Timesheet_Roster || [];
       const updatedRoster = qRoster.map((r) => {
         const isMatch = (r._uuid && row._uuid && r._uuid === row._uuid) || 
                         (!r._uuid && r._rowId === row._rowId && r.ma_nv === row.ma_nv && r.ngay === row.ngay && r.gio_vao === row.gio_vao);
@@ -1294,7 +1300,7 @@ export function TimesheetHub() {
       });
       return {
         ...prev,
-        Q_Roster: updatedRoster,
+        Timesheet_Roster: updatedRoster,
       };
     });
     toast.success("Đã cập nhật dữ liệu!");
@@ -1708,7 +1714,7 @@ export function TimesheetHub() {
                           <p className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-accent/80 animate-pulse font-sans">
                             {isPending
                               ? "Đang chuyển bảng..."
-                              : `Đang xử lý ${appData.Q_Roster?.length || 0} dòng dữ liệu...`}
+                              : `Đang xử lý ${appData.Timesheet_Roster?.length || 0} dòng dữ liệu...`}
                           </p>
                         </div>
                       ) : activeTab === "mkt_local_north" ? (

@@ -158,7 +158,8 @@ export const INITIAL_APP_DATA: AppData = {
   },
   Q_Staff: [],
   Q_Salary_Scale: [],
-  Q_Roster: [
+  Master_Roster: [],
+  Timesheet_Roster: [
     {
       _rowId: "mock-row-1",
       _sourceFile: "Mock_Roster.xlsx",
@@ -403,5 +404,5 @@ export const INITIAL_APP_DATA: AppData = {
   TA_Center_Summary: { headers: [], data: [] },
   Q_TeacherHours: [],
   Q_TeacherHoursFileName: "",
-  Q_RosterEditHistory: [],
+  Timesheet_RosterEditHistory: [],
 };

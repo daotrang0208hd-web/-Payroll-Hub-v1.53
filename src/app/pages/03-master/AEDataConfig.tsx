@@ -382,10 +382,7 @@ export function AEDataConfig({
       // Keep SavedPeriods_HoldAdd or clear it? 
       // Based on "xóa toàn bộ dữ liệu", clearing everything is safer.
       SavedPeriods_HoldAdd: {},
-      Q_Roster: [],
-      Q_Salary_Scale: [],
-      Q_Staff: [],
-      Q_Cache: [],
+      Master_Roster: [],
     }));
     localStorage.removeItem("pivot_master_processed_data");
     localStorage.removeItem(PIVOT_MKT_TYPE_CACHE_KEY);
@@ -2302,8 +2299,8 @@ export function AEDataConfig({
             ...row,
             status: statusById.get(row.id) || row.status,
           })),
-          Q_Roster: [
-            ...(prev.Q_Roster || []).filter(r => !targets.some(t => t.name === r._sourceFile)),
+          Master_Roster: [
+            ...(prev.Master_Roster || []).filter(r => !targets.some(t => t.name === r._sourceFile)),
             ...rosterDataToAppend
           ],
           Bank_North_AE: {
@@ -2357,7 +2354,7 @@ export function AEDataConfig({
 
       // Đồng bộ dữ liệu Pivot Master
       try {
-        const retainedRosterRows = (appData.Q_Roster || []).filter(
+        const retainedRosterRows = (appData.Master_Roster || []).filter(
           (row: any) =>
             !targets.some((target) => target.name === row?._sourceFile),
         );
@@ -2485,7 +2482,7 @@ export function AEDataConfig({
       <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-none border border-border">
 
         {/* Integrated Header & Controls */}
-        <div className="unified-table-frame-header relative z-10 flex min-h-[56px] w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 bg-primary/[0.035] px-3 py-2 md:flex-row md:items-center">
+        <div className="master-config-header unified-table-frame-header relative z-10 flex w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 px-4 md:flex-row md:items-center">
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
             <button
               type="button"
@@ -2493,21 +2490,21 @@ export function AEDataConfig({
                 if (onSwitchToFinal) onSwitchToFinal();
                 else navigate("/master-ae");
               }}
-              className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+              className="master-config-icon flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-[0.98]"
               title="Quay lại Gross Pay"
               aria-label="Quay lại bảng Gross Pay"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+            <div className="master-config-icon flex shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
               <FileSpreadsheet className="h-4 w-4" />
             </div>
 
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
-                Cài đặt và tải file Master
+              <h1 className="truncate text-base font-extrabold leading-5 tracking-tight text-foreground">
+                Cài đặt &amp; Tải file (Master)
               </h1>
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[9px] font-medium leading-3.5 text-muted-foreground">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium leading-4 text-muted-foreground">
                 <span className="inline-flex items-center gap-1 whitespace-nowrap">
                   <strong className="font-bold text-foreground">{appData.Ae_Global_Inputs.length || 0}</strong>
                   file cấu hình
@@ -2519,7 +2516,7 @@ export function AEDataConfig({
                 </span>
                 <span aria-hidden="true" className="text-border">•</span>
                 <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                  <strong className="font-bold text-foreground">{appData.Q_Roster?.length || 0}</strong>
+                  <strong className="font-bold text-foreground">{appData.Master_Roster?.length || 0}</strong>
                   bản ghi MKT
                 </span>
               </div>
@@ -2564,7 +2561,7 @@ export function AEDataConfig({
               <button
                 onClick={() => processAEData()}
                 disabled={isProcessing}
-                className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3 text-[10px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                className="master-header-action flex items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-bold uppercase tracking-wide text-primary-foreground shadow-sm transition-all hover:brightness-95 active:scale-[0.98] disabled:opacity-50"
               >
                 {isProcessing ? (
                   <Loader2 className="w-4 h-4 animate-spin shrink-0" />
@@ -2577,7 +2574,7 @@ export function AEDataConfig({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="group relative z-10 flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+                    className="master-header-action group relative z-10 flex cursor-pointer items-center gap-1.5 rounded-full border border-border bg-card px-3 text-foreground shadow-sm transition-all hover:bg-muted active:scale-[0.98]"
                     aria-label="Mở cài đặt Master"
                   >
                     <Settings className="h-3.5 w-3.5 shrink-0 text-primary transition-transform duration-300 group-hover:rotate-45" />

@@ -252,7 +252,10 @@ export function Audit() {
 
   const fromDate = appData.Timesheet_Dates?.from || "";
   const toDate = appData.Timesheet_Dates?.to || "";
-  const rosterData = useMemo(() => appData.Q_Roster || [], [appData.Q_Roster]);
+  const rosterData = useMemo(
+    () => appData.Timesheet_Roster || [],
+    [appData.Timesheet_Roster],
+  );
 
   const { state, computed, actions } = useTeacherTaAuditLogic(
     rosterData,

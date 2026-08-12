@@ -640,7 +640,8 @@ export function UiSettingsModal({
       CustomReport: { ...prev.CustomReport, data: [] },
       Q_Staff: [],
       Q_Salary_Scale: [],
-      Q_Roster: [],
+      Timesheet_Roster: [],
+      Master_Roster: [],
       Q_Cache: [],
       Timesheets: [],
     }));

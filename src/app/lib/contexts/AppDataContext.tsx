@@ -79,6 +79,70 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (saved) {
+          // Split the legacy shared roster into page-owned namespaces. Older
+          // versions let Master and Timesheet overwrite the same Q_Roster
+          // array, so migrate once and never read that shared key again.
+          const legacySaved = saved as AppData & {
+            Q_Roster?: any[];
+            Q_RosterFileName?: string;
+            Q_RosterEditHistory?: any[];
+          };
+          const legacyRoster = Array.isArray(legacySaved.Q_Roster)
+            ? legacySaved.Q_Roster
+            : [];
+          const normalizeSourceName = (value: unknown) =>
+            String(value || "").trim().toUpperCase();
+          const masterSourceNames = new Set(
+            (saved.Ae_Global_Inputs || [])
+              .flatMap((row: any) => [row?.name, row?.fileName])
+              .map(normalizeSourceName)
+              .filter(Boolean),
+          );
+          const timesheetSourceNames = new Set(
+            (saved.Timesheet_InputList || [])
+              .flatMap((row: any) => [row?.name, row?.fileName])
+              .map(normalizeSourceName)
+              .filter(Boolean),
+          );
+          const rowsForSources = (sources: Set<string>) =>
+            legacyRoster.filter((row: any) =>
+              sources.has(normalizeSourceName(row?._sourceFile)),
+            );
+
+          if (!Array.isArray(saved.Master_Roster)) {
+            const matchedMasterRows = rowsForSources(masterSourceNames);
+            saved.Master_Roster = matchedMasterRows.length > 0
+              ? matchedMasterRows
+              : masterSourceNames.size > 0
+                ? legacyRoster
+                : [];
+          }
+          if (!Array.isArray(saved.Timesheet_Roster)) {
+            const matchedTimesheetRows = rowsForSources(timesheetSourceNames);
+            const hasTimesheetData =
+              (saved.Q_Staff || []).length > 0 ||
+              (saved.Q_Salary_Scale || []).length > 0 ||
+              timesheetSourceNames.size > 0;
+            saved.Timesheet_Roster = matchedTimesheetRows.length > 0
+              ? matchedTimesheetRows
+              : hasTimesheetData
+                ? legacyRoster
+                : [];
+          }
+          if (!saved.Timesheet_RosterFileName && legacySaved.Q_RosterFileName) {
+            saved.Timesheet_RosterFileName = legacySaved.Q_RosterFileName;
+          }
+          if (
+            !saved.Timesheet_RosterEditHistory &&
+            Array.isArray(legacySaved.Q_RosterEditHistory)
+          ) {
+            saved.Timesheet_RosterEditHistory =
+              legacySaved.Q_RosterEditHistory;
+          }
+          delete legacySaved.Q_Roster;
+          delete legacySaved.Q_RosterFileName;
+          delete legacySaved.Q_RosterEditHistory;
+
           // --- MIGRATION FOR HOLD_AE ---
           if (saved.Hold_AE) {
             let h = saved.Hold_AE.headers;
@@ -252,7 +316,8 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
             ...state.present,
             Q_Staff: [],
             Q_Salary_Scale: [],
-            Q_Roster: [],
+            Timesheet_Roster: [],
+            Master_Roster: [],
             Q_Cache: [],
             Timesheets: [],
           };

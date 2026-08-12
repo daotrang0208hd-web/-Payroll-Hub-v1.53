@@ -247,10 +247,7 @@ export function useMasterAELogic() {
       ...prev,
       Sheet1_AE: { ...prev.Sheet1_AE, data: [] },
       Bank_North_AE: { ...prev.Bank_North_AE, data: [] },
-      Q_Roster: [],
-      Q_Salary_Scale: [],
-      Q_Staff: [],
-      Q_Cache: [],
+      Master_Roster: [],
     }));
     toast.success("Đã xóa tất cả dữ liệu Sheet1, Bank và Dữ liệu Pivot, giữ nguyên Hold");
   }, [updateAppData]);

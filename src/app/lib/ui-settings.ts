@@ -198,26 +198,136 @@ function isValidColor(color: unknown): boolean {
   );
 }
 
+type RgbColor = { r: number; g: number; b: number };
+
+function parseCssColor(color: string): RgbColor | null {
+  const value = color.trim();
+  const shortHex = value.match(/^#([0-9a-f]{3,4})$/i);
+  if (shortHex) {
+    const [r, g, b] = shortHex[1].slice(0, 3).split("").map((part) =>
+      parseInt(part + part, 16),
+    );
+    return { r, g, b };
+  }
+
+  const longHex = value.match(/^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i);
+  if (longHex) {
+    return {
+      r: parseInt(longHex[1].slice(0, 2), 16),
+      g: parseInt(longHex[1].slice(2, 4), 16),
+      b: parseInt(longHex[1].slice(4, 6), 16),
+    };
+  }
+
+  const rgb = value.match(
+    /^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)/i,
+  );
+  if (!rgb) return null;
+  return {
+    r: Math.min(255, Number(rgb[1])),
+    g: Math.min(255, Number(rgb[2])),
+    b: Math.min(255, Number(rgb[3])),
+  };
+}
+
+function rgbToHsl({ r, g, b }: RgbColor) {
+  const red = r / 255;
+  const green = g / 255;
+  const blue = b / 255;
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const delta = max - min;
+  const lightness = (max + min) / 2;
+  let hue = 0;
+
+  if (delta !== 0) {
+    if (max === red) hue = ((green - blue) / delta) % 6;
+    else if (max === green) hue = (blue - red) / delta + 2;
+    else hue = (red - green) / delta + 4;
+    hue = (hue * 60 + 360) % 360;
+  }
+
+  const saturation =
+    delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+  return { h: hue, s: saturation * 100, l: lightness * 100 };
+}
+
+function rotateHarmonyColor(color: RgbColor, degrees: number) {
+  const { h, s, l } = rgbToHsl(color);
+  return `hsl(${Math.round((h + degrees) % 360)} ${s.toFixed(1)}% ${l.toFixed(1)}%)`;
+}
+
+function readableForeground(color: RgbColor) {
+  const linear = ({ r, g, b }: RgbColor) =>
+    [r, g, b].map((channel) => {
+      const value = channel / 255;
+      return value <= 0.04045
+        ? value / 12.92
+        : Math.pow((value + 0.055) / 1.055, 2.4);
+    });
+  const [r, g, b] = linear(color);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.179 ? "#09090b" : "#ffffff";
+}
+
+function applyHarmonyVariables(root: HTMLElement, accent: string) {
+  const parsed = parseCssColor(accent) || { r: 9, g: 9, b: 11 };
+  root.style.setProperty("--primary-foreground", readableForeground(parsed));
+  root.style.setProperty("--harmony-complement", rotateHarmonyColor(parsed, 180));
+  root.style.setProperty("--harmony-triadic-1", rotateHarmonyColor(parsed, 120));
+  root.style.setProperty("--harmony-triadic-2", rotateHarmonyColor(parsed, 240));
+  root.style.setProperty("--harmony-tetradic-1", rotateHarmonyColor(parsed, 90));
+  root.style.setProperty("--harmony-tetradic-2", rotateHarmonyColor(parsed, 180));
+  root.style.setProperty("--harmony-tetradic-3", rotateHarmonyColor(parsed, 270));
+  root.style.setProperty(
+    "--theme-surface-soft",
+    `color-mix(in srgb, ${accent} 5%, var(--card, #ffffff))`,
+  );
+  root.style.setProperty(
+    "--theme-surface-strong",
+    `color-mix(in srgb, ${accent} 10%, var(--card, #ffffff))`,
+  );
+  root.style.setProperty(
+    "--theme-surface-complement",
+    "color-mix(in srgb, var(--harmony-complement) 7%, var(--card, #ffffff))",
+  );
+  root.style.setProperty(
+    "--theme-surface-triadic",
+    "color-mix(in srgb, var(--harmony-triadic-1) 6%, var(--card, #ffffff))",
+  );
+  root.style.setProperty(
+    "--theme-surface-tetradic",
+    "color-mix(in srgb, var(--harmony-tetradic-1) 5%, var(--card, #ffffff))",
+  );
+}
+
 export function applyUiSettings(settings: UiSettings, previewRule?: Partial<CustomRule>) {
   const root = document.documentElement;
+  applyHarmonyVariables(root, settings.accent || "#09090b");
 
   if (settings.preset === "dark_tech") {
     root.classList.add("dark");
-    root.style.setProperty("--card", "#18181B");
-    root.style.setProperty("--card-foreground", "#F4F4F5");
-    root.style.setProperty("--popover", "#18181B");
-    root.style.setProperty("--popover-foreground", "#F4F4F5");
-    root.style.setProperty("--muted", "#27272A");
-    root.style.setProperty("--muted-foreground", "#A1A1AA");
   } else {
     root.classList.remove("dark");
-    root.style.setProperty("--card", "#FFFFFF");
-    root.style.setProperty("--card-foreground", settings.text || "#334155");
-    root.style.setProperty("--popover", "#FFFFFF");
-    root.style.setProperty("--popover-foreground", settings.text || "#334155");
-    root.style.setProperty("--muted", "#F1F5F9");
-    root.style.setProperty("--muted-foreground", "#64748B");
   }
+
+  const accent = settings.accent || "#09090b";
+  const background = settings.bg || (settings.preset === "dark_tech" ? "#09090b" : "#ffffff");
+  const foreground = settings.text || (settings.preset === "dark_tech" ? "#f4f4f5" : "#18181b");
+  const cardMix = settings.preset === "dark_tech" ? 8 : 2;
+  const card = `color-mix(in srgb, ${accent} ${cardMix}%, ${background})`;
+  root.style.setProperty("--card", card);
+  root.style.setProperty("--card-foreground", foreground);
+  root.style.setProperty("--popover", card);
+  root.style.setProperty("--popover-foreground", foreground);
+  root.style.setProperty(
+    "--muted",
+    `color-mix(in srgb, ${accent} ${settings.preset === "dark_tech" ? 14 : 7}%, ${background})`,
+  );
+  root.style.setProperty(
+    "--muted-foreground",
+    `color-mix(in srgb, ${accent} 48%, ${foreground})`,
+  );
 
   if (settings.bg) root.style.setProperty("--background", settings.bg);
   if (settings.text) root.style.setProperty("--foreground", settings.text);
@@ -230,6 +340,9 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     root.style.setProperty("--accent", settings.accent);
     root.style.setProperty("--primary", settings.accent);
     root.style.setProperty("--ring", settings.accent);
+    root.style.setProperty("--secondary", "var(--harmony-complement)");
+    root.style.setProperty("--secondary-foreground", "var(--primary-foreground)");
+    root.style.setProperty("--accent-foreground", "var(--primary-foreground)");
   }
 
   if (settings.bgImageStyle?.startsWith("brand-stripes-")) {

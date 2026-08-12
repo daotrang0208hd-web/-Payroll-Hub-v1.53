@@ -47,24 +47,25 @@
   --font-weight-bold: 600;
   --tracking-tight: 0.02em;
 
-  /* Systematic Design Palette - Smart Minimalist (Beige, Gray, Pink, Ocean Blue) */
-  --background: #F8F7F4; /* Beige */
-  --foreground: #334155; /* Slate Gray */
+  /* Systematic fallback palette. Runtime settings derive all supporting
+     surfaces and harmonies from the user's selected accent. */
+  --background: #F8F7F4;
+  --foreground: #5D111A;
   --card: #ffffff; 
-  --card-foreground: #334155;
-  --primary: #0EA5E9; /* Ocean Blue */
+  --card-foreground: #5D111A;
+  --primary: #5D111A;
   --primary-foreground: #ffffff; 
-  --secondary: #F43F5E; /* Pink */
+  --secondary: #114D44;
   --secondary-foreground: #ffffff;
-  --accent: #E0F2FE; /* Light Ocean Blue */
-  --accent-foreground: #0284C7; /* Darker Ocean Blue */
+  --accent: #5D111A;
+  --accent-foreground: #ffffff;
   --popover: #ffffff;
-  --popover-foreground: #334155;
-  --muted: #F1F5F9; /* Light Gray */
-  --muted-foreground: #64748B; /* Gray */
-  --border: #E2E8F0; /* Gray Border */
-  --table-grid-color: #e7dbdc; /* Table grid border color */
-  --ring: #0EA5E9;
+  --popover-foreground: #5D111A;
+  --muted: #F2ECEC;
+  --muted-foreground: #6B4A4F;
+  --border: #E7DBDC;
+  --table-grid-color: #e7dbdc;
+  --ring: #5D111A;
   --sky: #0EA5E9; 
   --rose: #F43F5E; 
   --radius: 0.75rem; /* Less rounded for smart minimalist look */
@@ -837,6 +838,153 @@ select:not([multiple]):not(.title-select-plain):focus {
   border-color: color-mix(in srgb, var(--primary) 18%, var(--border)) !important;
 }
 
+/* Master owns its visual language. These tokens are derived from the user's
+   accent harmony and are intentionally not shared with Timesheet pages. */
+.master-theme-panel,
+.page-master-ae,
+.page-master-config,
+.pivot-master-frame {
+  --master-border: color-mix(in srgb, var(--primary) 20%, var(--border));
+  --master-divider: color-mix(in srgb, var(--primary) 12%, var(--border));
+  --master-surface: var(--theme-surface-soft, color-mix(in srgb, var(--primary) 5%, var(--card)));
+  --master-surface-alt: var(--theme-surface-complement, color-mix(in srgb, var(--primary) 3%, var(--card)));
+  color: var(--card-foreground, var(--foreground));
+}
+
+.master-theme-panel {
+  background: linear-gradient(145deg, var(--card) 0%, var(--master-surface) 100%) !important;
+  border-color: var(--master-border) !important;
+}
+
+.master-panel-header,
+.master-config-header {
+  background: linear-gradient(110deg, var(--master-surface) 0%, var(--master-surface-alt) 100%) !important;
+  border-color: var(--master-divider) !important;
+}
+
+.master-panel-tabs {
+  background: color-mix(in srgb, var(--primary) 4%, var(--card)) !important;
+  border-color: var(--master-divider) !important;
+}
+
+.master-panel-tab {
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+  background: color-mix(in srgb, var(--primary) 2%, var(--card));
+  color: color-mix(in srgb, var(--primary) 55%, var(--foreground));
+}
+
+.master-panel-tab:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--card));
+  color: var(--primary);
+}
+
+.master-panel-tab.is-active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 4px 12px -8px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.master-square-action {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border)) !important;
+  background: color-mix(in srgb, var(--primary) 2%, var(--card)) !important;
+}
+
+.master-square-action:hover {
+  background: color-mix(in srgb, var(--primary) 8%, var(--card)) !important;
+}
+
+.master-header-action {
+  height: 34px !important;
+  min-height: 34px !important;
+}
+
+.master-config-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  min-height: 34px !important;
+}
+
+.master-payout-hero {
+  background: linear-gradient(
+    120deg,
+    var(--primary) 0%,
+    color-mix(in srgb, var(--primary) 86%, var(--harmony-complement)) 100%
+  ) !important;
+  border-color: color-mix(in srgb, var(--primary) 72%, var(--harmony-complement)) !important;
+}
+
+.master-payout-glow {
+  background: color-mix(in srgb, var(--harmony-triadic-1) 24%, transparent);
+}
+
+.bu-summary-card {
+  background: linear-gradient(145deg, var(--card) 0%, var(--theme-surface-soft) 100%) !important;
+  border-color: var(--master-border) !important;
+}
+
+.bu-summary-card > div:first-child,
+.bu-amount-card > div:last-child {
+  border-color: var(--master-divider) !important;
+}
+
+.bu-amount-card {
+  background: linear-gradient(
+    135deg,
+    var(--theme-surface-complement) 0%,
+    var(--theme-surface-triadic) 100%
+  ) !important;
+  border-color: color-mix(in srgb, var(--primary) 17%, var(--border)) !important;
+}
+
+.bu-summary-label {
+  color: color-mix(in srgb, var(--primary) 62%, var(--foreground));
+  font-family: var(--font-main), sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.bu-summary-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.bu-summary-breakdown {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border)) !important;
+}
+
+.bu-summary-detail-label {
+  color: color-mix(in srgb, var(--primary) 42%, var(--foreground));
+  font-family: var(--font-main), sans-serif;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+}
+
+.bu-summary-detail-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.master-info-card {
+  background: linear-gradient(145deg, var(--theme-surface-soft), var(--theme-surface-tetradic)) !important;
+  border-color: var(--master-border) !important;
+}
+
 /* 4. Remove background and borders from specific toolbars */
 .flex.bg-slate-200\/30,
 div.flex.bg-slate-200\/30,
@@ -1557,14 +1705,22 @@ div.audit-data-table-wrapper {
   margin: 0 !important;
 }
 
-/* Master follows the compact Timesheet visual rhythm without changing table logic. */
+/* Master table density is scoped here and remains independent from Timesheet. */
+.page-master-config .master-config-header {
+  height: 64px !important;
+  min-height: 64px !important;
+  max-height: 64px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
 .page-master-config .master-config-table thead th {
-  padding: 6px 10px !important;
-  background: var(--table-header-bg, #f1f5f9) !important;
-  color: var(--accent, var(--primary, #781d1d)) !important;
-  border-color: #e2e8f0 !important;
-  font-size: 10px !important;
-  line-height: 14px !important;
+  padding: 8px 10px !important;
+  background: color-mix(in srgb, var(--primary) 8%, var(--card)) !important;
+  color: var(--primary) !important;
+  border-color: var(--master-divider) !important;
+  font-size: 11px !important;
+  line-height: 15px !important;
   letter-spacing: 0.06em !important;
 }
 
@@ -1574,7 +1730,7 @@ div.audit-data-table-wrapper {
 }
 
 .page-master-config .master-config-table tbody td {
-  border-color: #e2e8f0 !important;
+  border-color: var(--master-divider) !important;
   font-size: var(--font-size, 13px) !important;
 }
 

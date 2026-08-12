@@ -999,7 +999,7 @@ export function PivotSheet() {
 
     try {
       const processedSheet1 = appData.Sheet1_AE?.data || [];
-      const processedRoster = (appData.Q_Roster || []).filter((row: any) => {
+      const processedRoster = (appData.Master_Roster || []).filter((row: any) => {
         const sourceFile = String(row?._sourceFile || "").trim().toUpperCase();
         const rowId = String(row?._rowId || "").trim().toLowerCase();
         return sourceFile !== "MOCK_ROSTER.XLSX" && !rowId.startsWith("mock-row-");
@@ -1114,7 +1114,7 @@ export function PivotSheet() {
 
       if (appData.Sheet1_AE?.data && appData.Sheet1_AE.data.length > 0) {
         const filteredSheet1 = appData.Sheet1_AE.data || [];
-        const filteredRoster = appData.Q_Roster || [];
+        const filteredRoster = appData.Master_Roster || [];
 
         const sheet1Res = buildPivotFromAppData(
           filteredSheet1,
@@ -1199,7 +1199,7 @@ export function PivotSheet() {
     appData.Ae_Global_Inputs,
     appData.globalMonth,
     appData.Sheet1_AE?.data,
-    appData.Q_Roster,
+    appData.Master_Roster,
     selectedMonthFilter,
     processFileBuffers,
     diagnosticLogs

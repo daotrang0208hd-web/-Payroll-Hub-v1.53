@@ -35,12 +35,17 @@ export default function App() {
           e.preventDefault();
           e.stopPropagation();
           window.dispatchEvent(new Event("app-data-refresh"));
-          window.dispatchEvent(new Event("trigger-pivot-refresh"));
-          window.dispatchEvent(new Event("master-ae-request-refresh"));
-          window.dispatchEvent(new Event("timesheet-request-refresh"));
-          window.dispatchEvent(new Event("audit-request-refresh"));
+          const pathname = window.location.pathname.toLowerCase();
+          if (pathname.startsWith("/master-ae")) {
+            window.dispatchEvent(new Event("trigger-pivot-refresh"));
+            window.dispatchEvent(new Event("master-ae-request-refresh"));
+          } else if (pathname.startsWith("/centers")) {
+            window.dispatchEvent(new Event("timesheet-request-refresh"));
+          } else if (pathname.startsWith("/audit")) {
+            window.dispatchEvent(new Event("audit-request-refresh"));
+          }
           window.dispatchEvent(new Event("ui-settings-changed"));
-          toast.success("Đã làm mới dữ liệu hệ thống (Ctrl + R)");
+          toast.success("Đã làm mới trang hiện tại (Ctrl + R)");
         }
       }
     };

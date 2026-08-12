@@ -30,7 +30,6 @@ export function calculateTimesheet(params: any) {
       toDateStr,
       appData,
       preferredYear,
-      aeConfigData,
       checkTAsMap,
       classSizeMap,
       TASK_COLUMNS,
@@ -172,7 +171,7 @@ export function calculateTimesheet(params: any) {
 
     let rawClassCode = String(getVal(t, ["class code", "class", "class_code", "classcode", "lớp", "class name", "mã lớp", "tên lớp", "mã lớp học", "classCode"]) || "");
 
-    const resolvedAuth = resolveL07Logic({ rawCenter: rCen, rawChargeToCenter, sourceFile: t._sourceFile || appData?.Q_RosterFileName || "", rawType, rawClassCode, rawAeCode, empId, staffLookup, normCenterCache }, TASK_COLUMNS);
+    const resolvedAuth = resolveL07Logic({ rawCenter: rCen, rawChargeToCenter, sourceFile: t._sourceFile || appData?.Timesheet_RosterFileName || "", rawType, rawClassCode, rawAeCode, empId, staffLookup, normCenterCache }, TASK_COLUMNS);
     let { l07, aeCode, taskField, correctedType, correctedClass } = resolvedAuth;
     const { chargeToCenterMkt, isMktLocal } = resolvedAuth;
 

@@ -153,8 +153,8 @@ export function useTeacherTaAuditLogic(rosterData: any[], fromDate: string, toDa
       
       updateAppData((prev) => ({
         ...prev,
-        Q_Roster: mappedRosters,
-        Q_RosterFileName: fileName
+        Timesheet_Roster: mappedRosters,
+        Timesheet_RosterFileName: fileName
       } as any));
     } catch (error) {
       console.error("Lỗi upload file B:", error);
@@ -316,7 +316,7 @@ export function useTeacherTaAuditLogic(rosterData: any[], fromDate: string, toDa
     };
   }, [fileAData, rosterData, fromDate, toDate, checkTAsDataRaw, fileNameA, fuzzyThreshold, centerMappingParam, appData.Q_BonusData, appData.Q_TeacherHoursFileName, appData.Q_BonusSheetName]);
 
-  const fileNameB = appData.Q_RosterFileName || "";
+  const fileNameB = appData.Timesheet_RosterFileName || "";
   const fileNameConfig = appData.Q_CheckTAsFileName || "";
 
   const clearData = () => {
@@ -324,8 +324,8 @@ export function useTeacherTaAuditLogic(rosterData: any[], fromDate: string, toDa
       ...prev,
       Q_TeacherHours: [],
       Q_TeacherHoursFileName: "",
-      Q_Roster: [],
-      Q_RosterFileName: "",
+      Timesheet_Roster: [],
+      Timesheet_RosterFileName: "",
       Q_CheckTAs: [],
       Q_CheckTAsFileName: "",
     }));

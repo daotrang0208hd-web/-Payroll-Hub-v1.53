@@ -1935,27 +1935,25 @@ export function BulkPayment({
       {/* Left Panel - Actions & Info (Unified Scrollable Card) */}
       {showLeftCard && (
         <div
-          className="bulk-payment-side-panel payroll-theme-card w-[340px] border flex flex-col gap-0 shrink-0 overflow-hidden min-h-0 relative select-text shadow-sm h-full rounded-none"
+          className="bulk-payment-side-panel master-theme-panel w-[360px] border flex flex-col gap-0 shrink-0 overflow-hidden min-h-0 relative select-text shadow-sm h-full rounded-none"
           style={{
             backgroundColor: "var(--card, #fff)",
           }}
         >
           {/* Header */}
           <div
-            className="flex items-center justify-between px-5 border-b border-slate-200/80 sticky top-0 z-25 shrink-0 box-border"
+            className="master-panel-header flex items-center justify-between px-5 border-b sticky top-0 z-25 shrink-0 box-border"
             style={{
               height: "73px",
               minHeight: "73px",
               maxHeight: "73px",
-              backgroundColor:
-                "color-mix(in srgb, var(--primary) 5%, var(--card, #fff))",
             }}
           >
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-primary block">
                 Statement
               </span>
-              <h2 className="text-sm font-black text-slate-900 uppercase tracking-tight font-display">
+              <h2 className="text-[15px] font-black text-foreground uppercase tracking-tight font-display">
                 Bulk Payment Hub
               </h2>
             </div>
@@ -1963,7 +1961,7 @@ export function BulkPayment({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleCopyReport}
-                className="p-2 text-slate-500 hover:text-slate-950 transition-all active:scale-95 bg-slate-50 hover:bg-slate-100 rounded-xl shrink-0 border border-slate-200/80 flex items-center justify-center cursor-pointer shadow-2xs"
+                className="master-square-action text-muted-foreground hover:text-primary transition-all active:scale-[0.98] shrink-0 border flex items-center justify-center cursor-pointer shadow-2xs"
                 title="Sao chép toàn bộ thông tin"
               >
                 <Copy className="w-4 h-4" />
@@ -1972,8 +1970,7 @@ export function BulkPayment({
           </div>
 
           <div
-            className="flex items-center gap-1 p-1.5 bg-primary/[0.035] border-b shrink-0"
-            style={{ borderColor: "#f0e3ef" }}
+            className="master-panel-tabs flex items-center gap-1.5 p-1.5 border-b shrink-0"
           >
             {[
               { id: "summary", label: "Overview", icon: Layers },
@@ -1987,10 +1984,10 @@ export function BulkPayment({
               <button
                 key={t.id}
                 onClick={() => setActiveLeftTab(t.id as any)}
-                className={`flex h-7 flex-1 items-center justify-center gap-1 px-1.5 rounded-lg text-[8.5px] font-extrabold uppercase tracking-[0.08em] transition-all cursor-pointer active:scale-[0.98] active:translate-y-[1px] ${
+                className={`master-panel-tab flex h-8 flex-1 items-center justify-center gap-1.5 px-2 rounded-lg text-[10px] font-extrabold uppercase tracking-[0.06em] transition-all cursor-pointer active:scale-[0.98] active:translate-y-[1px] ${
                   activeLeftTab === t.id
-                    ? "bg-primary text-white shadow-sm border border-primary"
-                    : "bg-[var(--card,#fff)] text-slate-600 border border-primary/10 hover:text-primary hover:bg-primary/[0.04] shadow-2xs"
+                    ? "is-active"
+                    : ""
                 }`}
               >
                 <t.icon className="h-3 w-3" />
@@ -2007,7 +2004,6 @@ export function BulkPayment({
               paddingLeft: "15px",
               paddingBottom: "15px",
               paddingRight: "15px",
-              borderColor: "#ecdcef",
             }}
           >
             <AnimatePresence mode="wait">
@@ -2027,17 +2023,16 @@ export function BulkPayment({
                 >
                   {/* Total Overview - Premium Minimal Dark Style */}
                   <div
-                    className="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 px-4 shadow-md flex flex-col justify-center relative overflow-hidden group"
+                    className="master-payout-hero border rounded-2xl px-4 shadow-md flex flex-col justify-center relative overflow-hidden group"
                     style={{ height: "63.8638px" }}
                   >
-                    <div className="absolute top-0 right-0 w-28 h-28 bg-primary/10 rounded-full blur-2xl -mr-12 -mt-12 group-hover:bg-primary/20 transition-all" />
-                    <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-slate-400/80 relative z-10 leading-none mb-0.5">
+                    <div className="master-payout-glow absolute top-0 right-0 w-28 h-28 rounded-full blur-2xl -mr-12 -mt-12 transition-all" />
+                    <span className="text-[11px] font-extrabold uppercase tracking-[0.16em] text-primary-foreground/75 relative z-10 leading-none mb-1">
                       TỔNG CHI LƯƠNG ĐỢT NÀY
                     </span>
                     <div className="flex items-baseline gap-1.5 relative z-10">
                       <p
-                        className="text-2xl font-black text-white font-mono tracking-tighter leading-none"
-                        style={{ fontSize: "27px", height: "28.0047px" }}
+                        className="text-[27px] font-black text-primary-foreground font-mono tracking-tighter leading-none"
                       >
                         {formatMoneyVND(totalPayoutSum).replace(" ₫", "")}
                       </p>
@@ -2047,19 +2042,19 @@ export function BulkPayment({
                   {/* BU breakdown metrics - REDESIGNED FOR SWISS HIGH DENSITY DROPDOWN CARD */}
                   <div className="flex flex-col gap-3">
                     <div className="flex items-center justify-between px-1">
-                      <span className="text-[9.5px] font-extrabold text-slate-500 uppercase tracking-[0.2em] font-sans flex items-center gap-2">
+                      <span className="text-xs font-extrabold text-foreground uppercase tracking-[0.14em] font-sans flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                         PHÁT SINH THEO BU
                       </span>
                     </div>
 
-                    <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-xs flex flex-col gap-3">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="bu-summary-card border rounded-2xl p-4 shadow-xs flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b pb-2.5">
                         <div className="relative flex items-center pr-2">
                           <select
                             value={selectedBUGroup}
                             onChange={(e) => setSelectedBUGroup(e.target.value)}
-                            className="appearance-none bg-transparent pl-0 pr-6 py-0.5 font-extrabold text-slate-900 font-sans text-[11px] uppercase tracking-wider cursor-pointer focus:outline-none"
+                            className="title-select-plain appearance-none bg-transparent pl-0 pr-7 py-0.5 font-extrabold text-foreground font-sans text-sm uppercase tracking-wide cursor-pointer focus:outline-none"
                           >
                             {["ALL", "AHN", "AHP", "ATH", "ATN", "APT", "Other"].map((biz) => {
                               const isAll = biz === "ALL";
@@ -2072,13 +2067,13 @@ export function BulkPayment({
                                 : (dynamicReportStats.holdAddItems || []).filter((i) => i.biz === biz);
                               const hasData = sheet1Val !== 0 || holdAddItems.length > 0;
                               return (
-                                <option key={biz} value={biz} className="font-semibold text-[11px] text-slate-800 bg-white">
+                                <option key={biz} value={biz} className="font-semibold text-xs text-foreground bg-card">
                                   {isAll ? "ALL BU" : `${biz.toUpperCase()} GROUP`}{hasData ? "" : " (TRỐNG)"}
                                 </option>
                               );
                             })}
                           </select>
-                          <ChevronDown className="w-3.5 h-3.5 text-slate-600 absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
                         </div>
                         <button
                           onClick={() => {
@@ -2123,10 +2118,10 @@ export function BulkPayment({
                             navigator.clipboard.writeText(text);
                             toast.success(isAll ? "Đã sao chép tổng hợp tất cả BU" : `Đã sao chép tổng hợp BU ${biz}`);
                           }}
-                          className="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer active:scale-90"
+                          className="master-square-action text-muted-foreground hover:text-primary transition-colors cursor-pointer active:scale-[0.98]"
                           title="Sao chép thông tin"
                         >
-                          <Copy className="w-3.5 h-3.5" />
+                          <Copy className="w-4 h-4" />
                         </button>
                       </div>
 
@@ -2175,56 +2170,56 @@ export function BulkPayment({
                           : (dynamicReportStats.finalTotals[biz] || (sheet1Val + deductionsSum));
 
                         return (
-                          <div className="payroll-theme-card rounded-xl p-3 border flex flex-col gap-2 shadow-xs transition-all">
+                          <div className="bu-amount-card rounded-xl p-4 border flex flex-col gap-3 shadow-xs transition-all">
                             <div className="flex justify-between items-center">
-                              <span className="text-slate-600 font-extrabold font-sans text-[10px] uppercase tracking-wider leading-none">
-                                🎀 GROSS PAY:
+                              <span className="bu-summary-label">
+                                GROSS PAY
                               </span>
-                              <span className="font-bold text-slate-800 font-mono text-[11px] tracking-tight">
+                              <span className="bu-summary-value text-foreground">
                                 {formatMoneyVND(sheet1Val).replace(" ₫", "")}
                               </span>
                             </div>
 
                             {/* DEDUCTIONS & BENEFITS */}
                             <div className="flex flex-col gap-1 mt-0.5">
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-extrabold text-slate-600 uppercase tracking-wider leading-none">
-                                  🎀 DEDUCTIONS:
+                              <div className="flex justify-between items-center gap-4">
+                                <span className="bu-summary-label">
+                                  DEDUCTIONS
                                 </span>
-                                <span className={`font-bold font-mono text-[11px] tracking-tight ${deductionsSum >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                                <span className={`bu-summary-value ${deductionsSum >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                                   {deductionsSum >= 0 ? "+" : ""}
                                   {formatMoneyVND(deductionsSum).replace(" ₫", "")}
                                 </span>
                               </div>
 
-                              <div className="flex flex-col gap-1 pl-3 border-l-2 border-slate-200/80 my-0.5">
-                                <div className="flex justify-between items-center text-[10px]">
-                                  <span className="text-slate-600 font-medium font-sans">
-                                    🐣 HOLD:
+                              <div className="bu-summary-breakdown flex flex-col gap-2 pl-4 border-l-2 my-0.5">
+                                <div className="flex justify-between items-center gap-4">
+                                  <span className="bu-summary-detail-label">
+                                    HOLD
                                   </span>
-                                  <span className={`font-mono font-bold ${holdOnly !== 0 ? "text-amber-600" : "text-slate-400"}`}>
+                                  <span className={`bu-summary-detail-value ${holdOnly !== 0 ? "text-amber-700" : "text-muted-foreground"}`}>
                                     {holdOnly !== 0
                                       ? `-${formatMoneyVND(Math.abs(holdOnly)).replace(" ₫", "")}`
                                       : "0"}
                                   </span>
                                 </div>
 
-                                <div className="flex justify-between items-center text-[10px]">
-                                  <span className="text-slate-600 font-medium font-sans">
-                                    🐣 ADD:
+                                <div className="flex justify-between items-center gap-4">
+                                  <span className="bu-summary-detail-label">
+                                    ADD
                                   </span>
-                                  <span className={`font-mono font-bold ${addOnly !== 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                                  <span className={`bu-summary-detail-value ${addOnly !== 0 ? "text-emerald-700" : "text-muted-foreground"}`}>
                                     {addOnly !== 0
                                       ? `+${formatMoneyVND(Math.abs(addOnly)).replace(" ₫", "")}`
                                       : "0"}
                                   </span>
                                 </div>
 
-                                <div className="flex justify-between items-center text-[10px]">
-                                  <span className="text-slate-600 font-medium font-sans">
-                                    🐣 BONUS:
+                                <div className="flex justify-between items-center gap-4">
+                                  <span className="bu-summary-detail-label">
+                                    BONUS
                                   </span>
-                                  <span className={`font-mono font-bold ${bonusOnly !== 0 ? "text-emerald-600" : "text-slate-400"}`}>
+                                  <span className={`bu-summary-detail-value ${bonusOnly !== 0 ? "text-emerald-700" : "text-muted-foreground"}`}>
                                     {bonusOnly !== 0
                                       ? `+${formatMoneyVND(Math.abs(bonusOnly)).replace(" ₫", "")}`
                                       : "0"}
@@ -2232,11 +2227,11 @@ export function BulkPayment({
                                 </div>
 
                                 {cancelOnly !== 0 && (
-                                  <div className="flex justify-between items-center text-[10px]">
-                                    <span className="text-slate-600 font-medium font-sans">
-                                      🐣 CANCEL:
+                                  <div className="flex justify-between items-center gap-4">
+                                    <span className="bu-summary-detail-label">
+                                      CANCEL
                                     </span>
-                                    <span className="font-mono font-bold text-amber-600">
+                                    <span className="bu-summary-detail-value text-amber-700">
                                       -
                                       {formatMoneyVND(
                                         Math.abs(cancelOnly),
@@ -2247,11 +2242,11 @@ export function BulkPayment({
                               </div>
                             </div>
 
-                            <div className="pt-2 border-t border-slate-200/60 mt-0.5 flex justify-between items-center">
-                              <span className="text-[10.5px] font-extrabold text-slate-900 uppercase tracking-tight">
-                                🎀 NET PAY:
+                            <div className="pt-3 border-t mt-0.5 flex justify-between items-center gap-4">
+                              <span className="bu-summary-label text-foreground">
+                                NET PAY
                               </span>
-                              <span className="text-xs font-black text-slate-950 font-mono tracking-tight">
+                              <span className="text-sm font-black text-foreground font-mono tracking-tight">
                                 {formatMoneyVND(finalTotal).replace(" ₫", "")}
                               </span>
                             </div>
@@ -2263,19 +2258,19 @@ export function BulkPayment({
 
                   {/* General Info */}
                   <div className="grid grid-cols-2 gap-3.5">
-                    <div className="bg-[#FAF9F6] border border-slate-200/80 p-3.5 rounded-xl flex flex-col gap-1.5 shadow-xs">
-                      <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider font-sans">
+                    <div className="master-info-card border p-3.5 rounded-xl flex flex-col gap-1.5 shadow-xs">
+                      <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider font-sans">
                         Tháng báo cáo
                       </span>
-                      <span className="text-xs font-black text-slate-800 font-mono leading-none">
+                      <span className="text-sm font-black text-foreground font-mono leading-none">
                         {appData.globalMonth || "03.2026"}
                       </span>
                     </div>
-                    <div className="bg-[#FAF9F6] border border-slate-200/80 p-3.5 rounded-xl flex flex-col gap-1.5 shadow-xs">
-                      <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider font-sans">
+                    <div className="master-info-card border p-3.5 rounded-xl flex flex-col gap-1.5 shadow-xs">
+                      <span className="text-[11px] font-extrabold text-muted-foreground uppercase tracking-wider font-sans">
                         Số dòng dữ liệu
                       </span>
-                      <span className="text-xs font-black text-slate-800 font-mono leading-none">
+                      <span className="text-sm font-black text-foreground font-mono leading-none">
                         {(appData.BankExport?.data || []).length}
                       </span>
                     </div>
@@ -2961,11 +2956,11 @@ export function BulkPayment({
 
       {/* Right Panel - Data View */}
       <div
-        className="bulk-payment-data-panel flex-1 bg-white border border-slate-300 dark:border-slate-700 rounded-none flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full"
+        className="bulk-payment-data-panel master-theme-panel flex-1 border rounded-none flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full"
         style={{
           borderRadius: "0px",
           borderWidth: rightPanelTab === "visuals" ? "0px" : "0.5px",
-          borderColor: "#cbd5e1",
+          borderColor: "var(--grid-line-color, var(--border))",
           marginLeft: "0px",
           paddingTop: "0px",
           paddingLeft: "0px",
@@ -2976,20 +2971,18 @@ export function BulkPayment({
         {/* ANALYSIS owns its own table header; the shared selector bar is removed. */}
         {rightPanelTab !== "visuals" && (
         <div
-          className="px-3 border-b border-slate-200/80 flex flex-row items-center justify-between w-full gap-3 shrink-0 select-none box-border"
+          className="master-panel-header px-3 border-b flex flex-row items-center justify-between w-full gap-3 shrink-0 select-none box-border"
           style={{
             height: "73px",
             minHeight: "73px",
             maxHeight: "73px",
-            backgroundColor:
-              "color-mix(in srgb, var(--primary) 5%, var(--card, #fff))",
           }}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => setShowLeftCard(!showLeftCard)}
-              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 border ${
+              className={`master-square-action shrink-0 transition-all cursor-pointer active:scale-[0.98] border ${
                 showLeftCard
                   ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
                   : "bg-primary text-white border-primary shadow-xs hover:brightness-90"
@@ -3065,7 +3058,7 @@ export function BulkPayment({
                 </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <p className="max-w-[260px] truncate px-1.5 text-[9px] font-medium leading-3.5 text-slate-500">
+              <p className="max-w-[260px] truncate px-1.5 text-[10px] font-medium leading-3.5 text-muted-foreground">
                 {rightPanelTab === "table"
                   ? `${displayBankExportData.length} giao dịch chuyển khoản`
                   : rightPanelTab === "reconcile"
@@ -3176,15 +3169,14 @@ export function BulkPayment({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="rounded-full border border-primary/15 bg-[var(--card,#fff)] text-slate-700 transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-2xs shrink-0 hover:bg-primary/[0.05]"
-                  style={{ width: "33.1913px", height: "33.1913px", minWidth: "33.1913px", minHeight: "33.1913px" }}
+                  className="master-square-action border text-foreground transition-all cursor-pointer flex items-center justify-center active:scale-[0.98] shadow-2xs shrink-0 hover:text-primary"
                   title={
                     rightPanelTab === "visuals"
                       ? "Cài đặt bảng ANALYS"
                       : "Cài đặt & Thao tác"
                   }
                 >
-                  <Settings className="w-4 h-4 text-slate-600" />
+                  <Settings className="w-4 h-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent

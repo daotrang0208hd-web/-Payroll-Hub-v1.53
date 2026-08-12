@@ -334,7 +334,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
 
 
-  const rosterData = useMemo(() => appData.Q_Roster || [], [appData.Q_Roster]);
+  const rosterData = useMemo(
+    () => appData.Timesheet_Roster || [],
+    [appData.Timesheet_Roster],
+  );
   const salaryScaleData = useMemo(() => appData.Q_Salary_Scale || [], [appData.Q_Salary_Scale]);
   const staffData = useMemo(() => appData.Q_Staff || [], [appData.Q_Staff]);
   const cacheData = useMemo(() => appData.Q_Cache || [], [appData.Q_Cache]);
@@ -400,7 +403,9 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             }
           : r,
       ),
-      Q_Roster: (prev.Q_Roster || []).filter((r) => r._rowId !== id),
+      Timesheet_Roster: (prev.Timesheet_Roster || []).filter(
+        (r) => r._rowId !== id,
+      ),
       Q_Salary_Scale: (prev.Q_Salary_Scale || []).filter((r) => r._rowId !== id),
       Q_Staff: (prev.Q_Staff || []).filter((r) => r._rowId !== id),
       Q_Cache: (prev.Q_Cache || []).filter((r) => r._rowId !== id),
@@ -419,7 +424,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         date: undefined,
         columnMapping: undefined,
       })),
-      Q_Roster: [],
+      Timesheet_Roster: [],
       Q_Salary_Scale: [],
       Q_Staff: [],
       Q_Cache: [],
@@ -698,7 +703,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             const next = { ...prev };
             
             // Remove existing roster rows for this rowId OR for this center/aeCode to overwrite and prevent duplicate entries
-            next.Q_Roster = (next.Q_Roster || []).filter((r: Record<string, unknown>) => {
+            next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
               if (r._rowId === id) return false;
               if (targetL07Lower) {
                 const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
@@ -709,7 +714,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               return true;
             });
 
-            next.Q_Roster = next.Q_Roster.concat(mapped);
+            next.Timesheet_Roster = next.Timesheet_Roster.concat(mapped);
             
             const displayDate = customUploadDate || row.date || new Date().toLocaleString("vi-VN", {
               day: "2-digit",
@@ -827,7 +832,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     }
 
     updateAppData((prev) => {
-      let nextRoster = prev.Q_Roster || [];
+      let nextRoster = prev.Timesheet_Roster || [];
       let nextSalary = prev.Q_Salary_Scale || [];
       let nextStaff = prev.Q_Staff || [];
       let nextCache = prev.Q_Cache || [];
@@ -897,7 +902,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
       return {
         ...prev,
-        Q_Roster: nextRoster,
+        Timesheet_Roster: nextRoster,
         Q_Salary_Scale: nextSalary,
         Q_Staff: nextStaff,
         Q_Cache: nextCache,
@@ -942,7 +947,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           const targetL07Lower = finalL07.trim().toLowerCase();
           const aeCodeLower = (targetRow?.aeCode || centerInfo?.aeCode || "").trim().toLowerCase();
 
-          next.Q_Roster = (next.Q_Roster || []).filter((r: Record<string, unknown>) => {
+          next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
             if (r._rowId === rowId) return false;
             if (targetL07Lower) {
               const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
@@ -962,7 +967,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             next.Q_Staff = next.Q_Staff.concat(allRows);
           else if (parsed.kind === "cache")
             next.Q_Cache = next.Q_Cache.concat(allRows);
-          else next.Q_Roster = next.Q_Roster.concat(allRows);
+          else next.Timesheet_Roster = next.Timesheet_Roster.concat(allRows);
 
           const d = new Date();
           const bu = detectedL07 ? getBusinessFromL07(detectedL07) : "";

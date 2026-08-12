@@ -56,7 +56,10 @@ export interface AppData {
   PivotConfig: PivotConfig;
   Q_Staff: any[];
   Q_Salary_Scale: any[];
-  Q_Roster: any[];
+  /** Timesheet-owned roster. Master must never read or mutate this collection. */
+  Timesheet_Roster: any[];
+  /** Master-owned MKT Local roster used only by Gross Pay/Pivot Master. */
+  Master_Roster: any[];
   Q_Cache: any[];
   Q_BonusData?: any[];
   Q_BonusSheetName?: string;
@@ -66,7 +69,8 @@ export interface AppData {
   TA_Center_Summary?: TableData;
   Q_TeacherHours?: any[];
   Q_TeacherHoursFileName?: string;
-  Q_RosterFileName?: string;
+  Timesheet_RosterFileName?: string;
+  Master_RosterFileName?: string;
   Q_CheckTAsFileName?: string;
   Q_CheckTAs?: any[];
   updatedAt?: any;
@@ -75,7 +79,7 @@ export interface AppData {
   SavedPeriods_HoldAdd?: Record<string, boolean>;
   SavedRows_HoldAdd?: Record<string, any[] | undefined>;
   ConfirmedIds_HoldAdd?: string[];
-  Q_RosterEditHistory?: any[];
+  Timesheet_RosterEditHistory?: any[];
 }
 
 export interface SalaryRate {
