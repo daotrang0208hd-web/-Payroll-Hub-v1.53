@@ -4,11 +4,8 @@ import {
   COMMON_FIELD_ALIASES,
   getExcelFileBuffer,
   scoreMatch,
-} from "../lib/utils/data-utils";
-import {
-  detectMasterSheetKind,
-  isRelevantMasterSheetName,
-} from "../lib/utils/master-sheet-utils";
+} from "../lib/utils/master-data-utils";
+import { isRelevantMasterSheetName } from "../lib/utils/master-sheet-utils";
 
 export interface MasterSheetPayload {
   sheetName: string;
@@ -27,7 +24,6 @@ interface ParseRequest {
   file: File;
   isMktFile: boolean;
   targetFields: string[];
-  includeRows?: boolean;
 }
 
 function buildMapping(
@@ -41,26 +37,10 @@ function buildMapping(
     for (let rowIndex = 0; rowIndex < Math.min(50, rows.length); rowIndex++) {
       const row = rows[rowIndex];
       if (!Array.isArray(row)) continue;
-      const rowValues = row
-        .map((cell) => String(cell ?? "").trim().replace(/\s+/g, " "))
-        .filter((value) => value && Number.isNaN(Number(value)));
-      const matchedTargetCount = targetFields.reduce((count, target) => {
-        const aliases = COMMON_FIELD_ALIASES[target] || [target.toUpperCase()];
-        const bestScore = rowValues.reduce(
-          (best, value) => Math.max(best, scoreMatch(value, target, aliases)),
-          0,
-        );
-        return bestScore >= 60 ? count + 1 : count;
-      }, 0);
-
-      // A real header row has several field labels. Scanning arbitrary data
-      // cells made values such as contract codes containing "MKT" become a
-      // fake mapping for Charge MKT Local.
-      if (matchedTargetCount < 3) continue;
-
-      rowValues.forEach((value) => {
+      row.forEach((cell) => {
+        const value = String(cell ?? "").trim().replace(/\s+/g, " ");
         const key = value.toLowerCase();
-        if (seen.has(key)) return;
+        if (!value || !Number.isNaN(Number(value)) || seen.has(key)) return;
         seen.add(key);
         headers.push(value);
       });
@@ -89,7 +69,6 @@ export async function parseMasterWorkbook(
   file: File,
   isMktFile: boolean,
   targetFields: string[],
-  includeRows = true,
 ): Promise<MasterWorkbookPayload> {
   const { buffer, name } = await getExcelFileBuffer(file);
   const lowerName = name.toLowerCase();
@@ -111,67 +90,32 @@ export async function parseMasterWorkbook(
         dense: true,
       });
 
-  const readRows = (sheetName: string, maxRows?: number) => {
-    const worksheet = workbook.Sheets[sheetName];
-    const ref = worksheet?.["!ref"];
-    let range: XLSX.Range | undefined;
-    if (maxRows && ref) {
-      range = XLSX.utils.decode_range(ref);
-      range.e.r = Math.min(range.e.r, maxRows - 1);
-    }
-
-    return XLSX.utils.sheet_to_json<any[]>(worksheet, {
+  const sheets = workbook.SheetNames.filter((sheetName) =>
+    isRelevantMasterSheetName(sheetName, isMktFile),
+  ).map((sheetName) => ({
+    sheetName,
+    rows: XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], {
       header: 1,
       defval: "",
       raw: true,
       blankrows: false,
-      ...(range ? { range } : {}),
-    });
-  };
-
-  const headerSamples = new Map(
-    workbook.SheetNames.map((sheetName) => [sheetName, readRows(sheetName, 50)]),
-  );
-  const relevantSheetNames = workbook.SheetNames.filter(
-    (sheetName) =>
-      isRelevantMasterSheetName(sheetName, isMktFile) ||
-      detectMasterSheetKind(sheetName, headerSamples.get(sheetName) || []) !==
-        "unknown",
-  );
-
-  // Mapping only needs the header area. Returning every row while the user is
-  // merely confirming many files duplicates all workbook data in main-thread
-  // memory and can make the tab crash.
-  const mappingSheets = relevantSheetNames.map((sheetName) => ({
-    sheetName,
-    rows: headerSamples.get(sheetName) || [],
+    }),
   }));
-  const sheets = includeRows
-    ? relevantSheetNames.map((sheetName) => ({
-        sheetName,
-        rows: readRows(sheetName),
-      }))
-    : [];
 
   return {
     fileName: name,
     sheetNames: workbook.SheetNames,
-    mapping: buildMapping(mappingSheets, targetFields),
+    mapping: buildMapping(sheets, targetFields),
     sheets,
   };
 }
 
 if (typeof self !== "undefined") {
   self.onmessage = async (event: MessageEvent<ParseRequest>) => {
-    const { requestId, file, isMktFile, targetFields, includeRows } = event.data;
+    const { requestId, file, isMktFile, targetFields } = event.data;
     try {
-      const result = await parseMasterWorkbook(
-        file,
-        isMktFile,
-        targetFields,
-        includeRows,
-      );
-      self.postMessage({ requestId, success: true, result: JSON.stringify(result) });
+      const result = await parseMasterWorkbook(file, isMktFile, targetFields);
+      self.postMessage({ requestId, success: true, result });
     } catch (error: any) {
       self.postMessage({
         requestId,

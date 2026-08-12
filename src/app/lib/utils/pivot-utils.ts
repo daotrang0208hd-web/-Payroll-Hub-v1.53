@@ -1,12 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  getBusinessFromL07,
-  mapL07,
-  resolveMktRosterCenter,
-} from "./center-utils";
-import { parseDurationToHours } from "../schemas/excel-schema";
-
-export const PIVOT_CACHE_VERSION = 4;
+export const PIVOT_CACHE_VERSION = 5;
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -89,8 +82,7 @@ export function sanitizePivotData(
 const KNOWN_NON_CHARGE_KEYS = new Set([
   "NO", "ID NUMBER", "FULL NAME", "BANK ACCOUNT NUMBER", "BANK NAME",
   "CITAD CODE", "TAX CODE", "CONTRACT NO", "TOTAL PAYMENT", "CENTER",
-  "BUSINESS", "BU", "L07", "_RAWAE", "THÁNG", "SALARY SCALE", "FROM", "TO", "TYPE",
-  "CHARGE TO CENTER", "CHARGE TO CENTER MKT", "CHARGE TO CENTER CODE", "CHARGETOCENTERCODE"
+  "BUSINESS", "BU", "L07", "_RAWAE", "THÁNG", "SALARY SCALE", "FROM", "TO", "TYPE"
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -139,110 +131,14 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
     newGroupedData[bu][l07][month][type] += amount;
   };
 
-  const rosterAllocations = rosterRows.flatMap((row) => {
-    if (!row) return [];
-
-    const rawChargeToCenter = String(
-      row["chargeToCenterCode"] ||
-        row["CHARGE TO CENTER"] ||
-        row["chargeToCenterMkt"] ||
-        row["charge_to_center_mkt"] ||
-        row["Charge to Center MKT"] ||
-        row["Center"] ||
-        row["center"] ||
-        "",
-    ).trim();
-    const resolved = resolveMktRosterCenter(rawChargeToCenter);
-    const storedL07 = String(row["l07"] || row["L07"] || "").trim();
-    const l07 = resolved.l07 || storedL07;
-
-    // The aggregate is replaced by allocations to real Charge To Center L07s.
-    if (!l07 || l07.toUpperCase() === "MKT LOCAL NORTH") return [];
-
-    const rawDuration =
-      row["duration"] ?? row["DURATION"] ?? row["HOURS"] ?? "";
-    let duration = parseDurationToHours(rawDuration);
-
-    // Recover legacy rows that were already persisted with the old 1899-hour
-    // bug. Their From/To cells still retain the original Excel clock values.
-    if (duration <= 0 && rawDuration !== "") {
-      const startHours = parseDurationToHours(
-        row["gio_vao"] ?? row["from"] ?? row["From"] ?? "",
-      );
-      const endHours = parseDurationToHours(
-        row["gio_ra"] ?? row["to"] ?? row["To"] ?? "",
-      );
-      if (endHours > 0 && startHours >= 0) {
-        duration = endHours >= startHours
-          ? endHours - startHours
-          : 24 - startHours + endHours;
-      }
-    }
-    const calculatedSalary = parseMoney(
-      row["calculatedSalary"] || row["CALCULATED SALARY"] || 0,
-    );
-    const hasRawDuration =
-      rawDuration !== null &&
-      rawDuration !== undefined &&
-      String(rawDuration).trim() !== "";
-    const salary = duration > 0
-      ? duration * 20000
-      : hasRawDuration
-        ? 0
-        : calculatedSalary;
-    const month = String(
-      row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026",
-    ).trim();
-    const type = String(
-      row["type"] ||
-        row["Type"] ||
-        row["LOẠI"] ||
-        row["Phân loại"] ||
-        row["Nghiệp vụ"] ||
-        "UNSPECIFIED",
-    ).trim();
-
-    if (!type || salary <= 0 || !Number.isFinite(salary)) return [];
-
-    return [
-      {
-        bu:
-          resolved.business ||
-          row["bu"] ||
-          row["Business"] ||
-          row["business"] ||
-          getBusinessFromL07(l07),
-        l07,
-        month,
-        type,
-        salary,
-      },
-    ];
-  });
-
-  const rosterAllocationMonths = new Set(
-    rosterAllocations.map((allocation) => allocation.month),
-  );
-
   sheet1Rows.forEach((row) => {
     if (!row) return;
-    const rawCenter =
-      row["Center"] ||
-      row["CENTER"] ||
-      row["CHARGE TO CENTER"] ||
-      row["Charge to Center"] ||
-      "";
-    const mappedCenterL07 = rawCenter ? mapL07(String(rawCenter)) : "";
-    const l07 = row["L07"] || mappedCenterL07 || rawCenter || "";
-    const bu = row["Business"] || row["BU"] || getBusinessFromL07(l07);
+    const bu = row["Business"] || row["BU"] || "";
+    const l07 = row["L07"] || row["Center"] || row["CHARGE TO CENTER"] || "";
     const month = row["Tháng báo cáo"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     if (!l07) return;
-    if (
-      String(l07).trim().toUpperCase() === "MKT LOCAL NORTH" &&
-      rosterAllocationMonths.has(String(month).trim())
-    ) {
-      return;
-    }
+
+    const centerHasMkt = String(l07).toUpperCase().includes("MKT");
 
     // Check if row contains individual charge columns
     let processedChargeCols = false;
@@ -255,6 +151,9 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
         const amt = parseMoney(row[key]);
         const cleanType = formatPivotTypeHeader(key);
         if (amt !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
+          if ((cleanType === "MKT LOCAL" || cleanType === "MKT LOCAL NORTH") && !centerHasMkt) {
+            return;
+          }
           processedChargeCols = true;
           addAmount(bu, l07, month, key, amt);
         }
@@ -266,6 +165,9 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
       const type = row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "UNSPECIFIED";
       const cleanType = formatPivotTypeHeader(type);
       if (totalPay !== 0 && cleanType !== "EXCLUDE" && cleanType !== "ADD" && cleanType !== "CANCEL") {
+        if ((cleanType === "MKT LOCAL" || cleanType === "MKT LOCAL NORTH") && !centerHasMkt) {
+          return;
+        }
         addAmount(bu, l07, month, type, totalPay);
       }
     }
@@ -273,8 +175,19 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
 
   // holdRows removed as per user request ("xóa hold đi, ko lấy dữ liệu sheet hold ae_master")
 
-  rosterAllocations.forEach(({ bu, l07, month, type, salary }) => {
-    addAmount(String(bu), l07, month, type, salary);
+  rosterRows.forEach((row) => {
+    if (!row) return;
+    const center = row["chargeToCenterCode"] || row["CHARGE TO CENTER"] || row["Center"] || "";
+    const duration = parseMoney(row["duration"] || row["DURATION"] || row["HOURS"] || 0);
+    const salary = duration > 0 ? duration * 24 * 20000 : parseMoney(row["calculatedSalary"] || row["TOTAL PAYMENT"] || row["TOTAL"] || row["totalPayment"] || 0);
+    const bu = row["bu"] || row["Business"] || "AHN";
+    const l07 = row["l07"] || row["L07"] || center || "MKT LOCAL NORTH";
+    const month = row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
+    const rowType = row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "MKT LOCAL";
+
+    if (salary > 0 && l07) {
+      addAmount(bu, l07, month, rowType, salary);
+    }
   });
 
   const sortedTypes = Array.from(uniqueTypes).sort((a, b) => {

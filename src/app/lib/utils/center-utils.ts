@@ -72,111 +72,7 @@ function normalizeCenterKey(str: string): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
-export const NORTH_MKT_LOCAL_L07_CODES = [
-  "MKT LOCAL NORTH",
-  "MKT LOCAL NORTH_HP",
-  "MKT LOCAL NORTH_TH",
-  "MKT LOCAL NORTH_TN",
-  "MKT LOCAL NORTH_PT",
-] as const;
-
-/**
- * Resolve the MKT Center values used by Sheet 1 / Gross Pay. This mapping is
- * deliberately opt-in and is not called by Pivot Master processing.
- */
-export function resolveNorthMktLocalL07(rawCenter: string): string {
-  const normalized = normalizeCenterKey(rawCenter);
-  if (!normalized.includes("MKT")) return "";
-
-  if (
-    normalized.includes("MKTLOCALNORTHHP") ||
-    normalized.includes("MKTHAIPHONG") ||
-    normalized.includes("MKTHP") ||
-    normalized.includes("HAIPHONG")
-  ) {
-    return "MKT LOCAL NORTH_HP";
-  }
-
-  // Check Thai Nguyen before the generic MKT TH prefix.
-  if (
-    normalized.includes("MKTLOCALNORTHTN") ||
-    normalized.includes("MKTTHAINGUYEN") ||
-    normalized.includes("MKTTN") ||
-    normalized.includes("THAINGUYEN")
-  ) {
-    return "MKT LOCAL NORTH_TN";
-  }
-
-  if (
-    normalized.includes("MKTLOCALNORTHTH") ||
-    normalized.includes("MKTTHANHHOA") ||
-    normalized.includes("MKTTH") ||
-    normalized.includes("THANHHOA")
-  ) {
-    return "MKT LOCAL NORTH_TH";
-  }
-
-  if (
-    normalized.includes("MKTLOCALNORTHPT") ||
-    normalized.includes("MKTPHUTHO") ||
-    normalized.includes("MKTPT") ||
-    normalized.includes("PHUTHO")
-  ) {
-    return "MKT LOCAL NORTH_PT";
-  }
-
-  // MKT HN, BN, NA, HY, VIN, VINH, VP and other North MKT aliases.
-  return "MKT LOCAL NORTH";
-}
-
-export function isNorthMktLocalL07(value: string): boolean {
-  const upper = String(value || "").trim().toUpperCase();
-  return (NORTH_MKT_LOCAL_L07_CODES as readonly string[]).includes(upper);
-}
-
-/** Resolve raw CHARGE TO CENTER from MKT Local Roster/Q_Roster to its real L07. */
-export function resolveMktRosterCenter(rawChargeToCenter: string): {
-  chargeToCenterMkt: string;
-  l07: string;
-  business: string;
-} {
-  const cleaned = String(rawChargeToCenter || "").trim();
-  if (!cleaned) {
-    return { chargeToCenterMkt: "", l07: "", business: "" };
-  }
-
-  const normalized = normalizeCenterKey(cleaned);
-
-  // Preserve the two allocation destinations used by the reference ZIP.
-  if (normalized === "NTW") {
-    return { chargeToCenterMkt: "NTW", l07: "NTW", business: "AHN" };
-  }
-  if (normalized === "HAIPHONG") {
-    return {
-      chargeToCenterMkt: "Hai Phong",
-      l07: "Hai Phong",
-      business: "AHP",
-    };
-  }
-
-  let l07 = "";
-  if (normalized.includes("MKT") || normalized.includes("MARKETING")) {
-    l07 = resolveNorthMktLocalL07(cleaned) || mapL07(cleaned) || cleaned;
-  } else {
-    l07 = mapL07(cleaned) || cleaned;
-  }
-
-  return {
-    chargeToCenterMkt: l07,
-    l07,
-    business: getBusinessFromL07(l07),
-  };
-}
-
 const LOOKUP_MAP = new Map<string, CenterInfo>();
-const FILE_NAME_L07_CACHE = new Map<string, string>();
-let fileNameCenterCandidates: Array<{ info: CenterInfo; key: string }> | null =
-  null;
 
 CENTER_DATA.forEach((info) => {
   const normL07 = normalizeCenterKey(info.l07);
@@ -289,12 +185,6 @@ export function resolveL07BuFromAeCode(code: string): { l07: string; bu: string 
 
 export function getBusinessFromL07(l07: string): string {
   if (!l07) return "AHN";
-  const rawUpper = String(l07).trim().toUpperCase();
-  if (rawUpper === "MKT LOCAL NORTH_HP") return "AHP";
-  if (rawUpper === "MKT LOCAL NORTH_TH") return "ATH";
-  if (rawUpper === "MKT LOCAL NORTH_TN") return "ATN";
-  if (rawUpper === "MKT LOCAL NORTH_PT") return "APT";
-
   const mapped = mapL07(l07);
   const info = getCenterInfoByL07(mapped);
   if (info?.bus) return info.bus;
@@ -335,47 +225,9 @@ export function resolveMktAndCenterL07(
 
 export function getL07FromFileName(fileName: string): string {
   if (!fileName) return "";
-  const normalizedName = String(fileName)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[Đđ]/g, "D")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const compactName = normalizedName.replace(/\s+/g, "");
-  const cached = FILE_NAME_L07_CACHE.get(normalizedName);
-  if (cached !== undefined) return cached;
-
-  if (normalizedName.includes("MKT") || normalizedName.includes("MARKETING")) {
-    const mktL07 = resolveNorthMktLocalL07(fileName) || "MKT LOCAL NORTH";
-    FILE_NAME_L07_CACHE.set(normalizedName, mktL07);
-    return mktL07;
-  }
-
-  if (!fileNameCenterCandidates) {
-    fileNameCenterCandidates = CENTER_DATA.filter(
-      (info) => !info.l07.toUpperCase().startsWith("MKT"),
-    )
-      .flatMap((info) =>
-        [info.l07, info.aeCode, ...info.keys].map((key) => ({
-          info,
-          key: normalizeCenterKey(key),
-        })),
-      )
-      .sort((left, right) => right.key.length - left.key.length);
-  }
-
-  const nameTokens = new Set(normalizedName.split(" ").filter(Boolean));
-  const match = fileNameCenterCandidates.find(({ key }) => {
-    if (!key) return false;
-    if (key.length >= 5 && compactName.includes(key)) return true;
-    return key.length >= 3 && nameTokens.has(key);
-  });
-
-  const resolvedL07 = match?.info.l07 || "";
-  FILE_NAME_L07_CACHE.set(normalizedName, resolvedL07);
-  return resolvedL07;
+  const name = fileName.toUpperCase();
+  if (name.includes("MKT")) return "MKT LOCAL NORTH";
+  return mapL07(fileName);
 }
 
 export function getL07FromChargeToCenterMkt(chargeToCenter: string): string {
@@ -403,4 +255,104 @@ export function extractCenterNameFromFileName(fileName: string): string {
   const l07 = getL07FromFileName(fileName);
   const info = getCenterInfoByL07(l07);
   return info ? info.aeCode : l07;
+}
+export const NORTH_MKT_LOCAL_L07_CODES = [
+  "MKT LOCAL NORTH",
+  "MKT LOCAL NORTH_HP",
+  "MKT LOCAL NORTH_TH",
+  "MKT LOCAL NORTH_TN",
+  "MKT LOCAL NORTH_PT",
+] as const;
+
+/**
+ * Resolve the MKT Center values used by Sheet 1 / Gross Pay. This mapping is
+ * deliberately opt-in and is not called by Pivot Master processing.
+ */
+export function resolveNorthMktLocalL07(rawCenter: string): string {
+  const normalized = normalizeCenterKey(rawCenter);
+  if (!normalized.includes("MKT")) return "";
+
+  if (
+    normalized.includes("MKTLOCALNORTHHP") ||
+    normalized.includes("MKTHAIPHONG") ||
+    normalized.includes("MKTHP") ||
+    normalized.includes("HAIPHONG")
+  ) {
+    return "MKT LOCAL NORTH_HP";
+  }
+
+  // Check Thai Nguyen before the generic MKT TH prefix.
+  if (
+    normalized.includes("MKTLOCALNORTHTN") ||
+    normalized.includes("MKTTHAINGUYEN") ||
+    normalized.includes("MKTTN") ||
+    normalized.includes("THAINGUYEN")
+  ) {
+    return "MKT LOCAL NORTH_TN";
+  }
+
+  if (
+    normalized.includes("MKTLOCALNORTHTH") ||
+    normalized.includes("MKTTHANHHOA") ||
+    normalized.includes("MKTTH") ||
+    normalized.includes("THANHHOA")
+  ) {
+    return "MKT LOCAL NORTH_TH";
+  }
+
+  if (
+    normalized.includes("MKTLOCALNORTHPT") ||
+    normalized.includes("MKTPHUTHO") ||
+    normalized.includes("MKTPT") ||
+    normalized.includes("PHUTHO")
+  ) {
+    return "MKT LOCAL NORTH_PT";
+  }
+
+  // MKT HN, BN, NA, HY, VIN, VINH, VP and other North MKT aliases.
+  return "MKT LOCAL NORTH";
+}
+
+export function isNorthMktLocalL07(value: string): boolean {
+  const upper = String(value || "").trim().toUpperCase();
+  return (NORTH_MKT_LOCAL_L07_CODES as readonly string[]).includes(upper);
+}
+
+/** Resolve raw CHARGE TO CENTER from MKT Local Roster/Q_Roster to its real L07. */
+export function resolveMktRosterCenter(rawChargeToCenter: string): {
+  chargeToCenterMkt: string;
+  l07: string;
+  business: string;
+} {
+  const cleaned = String(rawChargeToCenter || "").trim();
+  if (!cleaned) {
+    return { chargeToCenterMkt: "", l07: "", business: "" };
+  }
+
+  const normalized = normalizeCenterKey(cleaned);
+
+  // Preserve the two allocation destinations used by the reference ZIP.
+  if (normalized === "NTW") {
+    return { chargeToCenterMkt: "NTW", l07: "NTW", business: "AHN" };
+  }
+  if (normalized === "HAIPHONG") {
+    return {
+      chargeToCenterMkt: "Hai Phong",
+      l07: "Hai Phong",
+      business: "AHP",
+    };
+  }
+
+  let l07 = "";
+  if (normalized.includes("MKT") || normalized.includes("MARKETING")) {
+    l07 = resolveNorthMktLocalL07(cleaned) || mapL07(cleaned) || cleaned;
+  } else {
+    l07 = mapL07(cleaned) || cleaned;
+  }
+
+  return {
+    chargeToCenterMkt: l07,
+    l07,
+    business: getBusinessFromL07(l07),
+  };
 }

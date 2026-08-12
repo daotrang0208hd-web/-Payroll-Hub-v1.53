@@ -4,10 +4,6 @@ import {
   isSheetOneMasterSheetName,
   normalizeMasterSheetName,
 } from "../lib/utils/master-sheet-utils";
-import { buildPivotFromAppData } from "../lib/utils/pivot-utils";
-import { resolveMktRosterCenter } from "../lib/utils/center-utils";
-import { parseDurationToHours } from "../lib/schemas/excel-schema";
-import { parseMoneyToNumber } from "../lib/utils/data-utils";
 
 function extractBankName(filename: string, fallbackBank?: string): string {
   const upper = filename.toUpperCase();
@@ -67,13 +63,25 @@ const L07_TO_BU_MAP: Record<string, string> = {
   "NTW": "NTW", "Hai Phong": "APH"
 };
 
+function parseMoneyToNumber(val: any): number {
+  if (typeof val === "number") return val;
+  if (!val) return 0;
+  const str = String(val).replace(/,/g, "").trim();
+  const num = parseFloat(str);
+  return isNaN(num) ? 0 : num;
+}
+
 function processTimesheetMktLogic(row: any) {
-  const resolved = resolveMktRosterCenter(row.chargetocenterCode);
-  return {
-    bu: resolved.business || "OTHER",
-    l07: resolved.l07,
-    chargeToCenterMkt: resolved.chargeToCenterMkt,
-  };
+  const mappedCenter = String(row.chargetocenterCode || "").trim();
+  let l07 = mappedCenter;
+  for (const [key, value] of Object.entries(rawCenterToMktMap)) {
+    if (key.toUpperCase() === mappedCenter.toUpperCase()) {
+      l07 = value;
+      break;
+    }
+  }
+  const bu = L07_TO_BU_MAP[l07] || "AHN";
+  return { bu, l07 };
 }
 
 function processNorthLogic(rawCenter: string) {
@@ -204,15 +212,10 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
         const durationColIdx = headers.findIndex((h: any) => {
           if (!h) return false;
           const val = String(h).trim().toUpperCase();
-          return val === 'DURATION';
-        });
-        const typeColIdx = headers.findIndex((h: any) => {
-          if (!h) return false;
-          const val = String(h).trim().toUpperCase();
-          return val === 'TYPE';
+          return val === 'DURATION' || val === 'HOURS' || val === 'SỐ GIỜ';
         });
 
-        if (centerColIdx !== -1 && durationColIdx !== -1 && typeColIdx !== -1) {
+        if (centerColIdx !== -1 && durationColIdx !== -1) {
           for (let r = headerRowIdx + 1; r < jsonData.length; r++) {
             const row = jsonData[r];
             if (!row || row.length === 0) continue;
@@ -220,19 +223,21 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
             const rawCenter = row[centerColIdx] || "";
             const rawDuration = row[durationColIdx];
             
-            const durationHours = parseDurationToHours(rawDuration);
-            const calculatedSalary = durationHours * 20000;
+            let durationVal = 0;
+            if (typeof rawDuration === 'number') {
+              durationVal = rawDuration;
+            } else if (typeof rawDuration === 'string') {
+              durationVal = parseFloat(rawDuration.replace(/,/g, ''));
+              if (isNaN(durationVal)) durationVal = 0;
+            }
+
+            const calculatedSalary = durationVal * 24 * 20000;
             if (calculatedSalary === 0) continue;
 
             const mapped = processTimesheetMktLogic({ chargetocenterCode: String(rawCenter) });
             const finalL07 = mapped.l07 || rawCenter;
-            if (String(finalL07).trim().toUpperCase() === "MKT LOCAL NORTH") {
-              continue;
-            }
-            const finalBU = mapped.bu || "OTHER";
-            const rawType = row[typeColIdx];
-            const finalType =
-              String(rawType || "").trim().toUpperCase() || "UNSPECIFIED";
+            const finalBU = mapped.bu || "AHN";
+            const finalType = "MKT LOCAL";
 
             uniqueTypes.add(finalType);
 
@@ -335,21 +340,8 @@ function processExcelData(fileList: { name: string; bank?: string; buffer: Array
 if (typeof window === "undefined" && typeof self !== "undefined") {
   self.onmessage = async (e: MessageEvent) => {
     try {
-      const {
-        fileList,
-        processedSheet1Rows,
-        processedRosterRows,
-      } = e.data || {};
-      const result = Array.isArray(processedSheet1Rows)
-        ? {
-            ...buildPivotFromAppData(
-              processedSheet1Rows,
-              [],
-              Array.isArray(processedRosterRows) ? processedRosterRows : [],
-            ),
-            logs: [],
-          }
-        : processExcelData(Array.isArray(fileList) ? fileList : []);
+      const { fileList } = e.data;
+      const result = processExcelData(fileList);
       self.postMessage({ success: true, result });
     } catch (err: any) {
       self.postMessage({ success: false, error: err.message });

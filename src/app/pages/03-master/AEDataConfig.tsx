@@ -24,23 +24,16 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import { useAppData } from "../../lib/contexts/AppDataContext";
-import {
-  buildPivotFromAppData,
-  PIVOT_CACHE_VERSION,
-} from "../../lib/utils/pivot-utils";
+import { buildPivotFromAppData } from "../../lib/utils/pivot-utils";
 import {
   parseMoneyToNumber,
   isMoneyColumn,
   fetchWithBackoff,
   removeVietnameseTones,
   formatIdNumber,
-} from "../../lib/utils/data-utils";
+} from "../../lib/utils/master-data-utils";
 import {
-  detectMasterSheetKind,
-  findBonusAmountColumn,
-  findBonusMasterHeaderRow,
   isBankMasterSheetName,
-  isBonusMasterSheetName,
   isHoldMasterSheetName,
   isRosterMasterSheetName,
   isSheetOneMasterSheetName,
@@ -58,36 +51,13 @@ function cleanFullName(val: any): string {
   const str = String(val).trim();
   return removeVietnameseTones(str).toUpperCase();
 }
-
-function findExactRosterColumn(headers: string[], aliases: string[]): number {
-  const normalize = (value: unknown) =>
-    removeVietnameseTones(String(value || ""))
-      .toUpperCase()
-      .replace(/[^A-Z0-9]+/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  const normalizedAliases = new Set(aliases.map(normalize));
-  return headers.findIndex((header) => normalizedAliases.has(normalize(header)));
-}
 import {
   mapL07,
   getCenterInfoByL07,
   getCenterInfoByAECode,
-  getBusinessFromL07,
-  isNorthMktLocalL07,
   resolveMktAndCenterL07,
-  resolveMktRosterCenter,
-  resolveNorthMktLocalL07,
 } from "../../lib/utils/center-utils";
 import { parseDurationToHours } from "../../lib/schemas/excel-schema";
-import {
-  finalizeGrossPayAmounts,
-  getGrossPayRowIdentity,
-  getGrossPaySourceChargeColumns,
-  isGrossPayChargeAmountColumn,
-  mergeGrossPayHeaders,
-  sanitizeGrossPayHeaders,
-} from "../../lib/utils/gross-pay-utils";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -104,13 +74,6 @@ import {
 } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../components/ui/select";
 import { ColumnMappingDialog } from "./components/ColumnMappingDialog";
 import {
 
@@ -162,114 +125,57 @@ interface AERow {
   columnMapping?: Record<string, string>;
 }
 
-function isMktMasterInput(item: Pick<AERow, "bank" | "name" | "fileObj">) {
-  const bank = String(item.bank || "").toUpperCase();
-  const fileName = String(item.name || item.fileObj?.name || "").toUpperCase();
-  return (
-    bank.includes("MKT") ||
-    fileName.includes("MKT") ||
-    fileName.includes("MARKETING")
-  );
-}
-
 interface PendingUpload {
   file: File;
   existingRowId?: string;
+}
+
+type PendingMasterRequest = {
+  resolve: (result: MasterWorkbookPayload) => void;
+  reject: (error: Error) => void;
+};
+
+let masterImportWorker: Worker | null = null;
+const pendingMasterRequests = new Map<string, PendingMasterRequest>();
+
+function getMasterImportWorker() {
+  if (masterImportWorker) return masterImportWorker;
+  masterImportWorker = new MasterImportWorker();
+  masterImportWorker.onmessage = (event: MessageEvent) => {
+    const requestId = String(event.data?.requestId || "");
+    const pending = pendingMasterRequests.get(requestId);
+    if (!pending) return;
+    pendingMasterRequests.delete(requestId);
+    if (event.data?.success) {
+      pending.resolve(event.data.result as MasterWorkbookPayload);
+    } else {
+      pending.reject(
+        new Error(event.data?.error || "Không thể xử lý file Master."),
+      );
+    }
+  };
+  masterImportWorker.onerror = (event) => {
+    const error = new Error(
+      event.message || "Master Import Worker đã dừng bất thường.",
+    );
+    pendingMasterRequests.forEach(({ reject }) => reject(error));
+    pendingMasterRequests.clear();
+    masterImportWorker?.terminate();
+    masterImportWorker = null;
+  };
+  return masterImportWorker;
 }
 
 function parseMasterFileInWorker(
   file: File,
   isMktFile: boolean,
   targetFields: string[],
-  includeRows: boolean,
-  signal?: AbortSignal,
 ) {
   const requestId = crypto.randomUUID();
-  const worker = new MasterImportWorker();
+  const worker = getMasterImportWorker();
   return new Promise<MasterWorkbookPayload>((resolve, reject) => {
-    let settled = false;
-    const finish = () => {
-      signal?.removeEventListener("abort", handleAbort);
-      worker.terminate();
-    };
-    const handleAbort = () => {
-      if (settled) return;
-      settled = true;
-      finish();
-      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
-      error.name = "AbortError";
-      reject(error);
-    };
-
-    if (signal?.aborted) {
-      handleAbort();
-      return;
-    }
-    signal?.addEventListener("abort", handleAbort, { once: true });
-
-    worker.onmessage = (event: MessageEvent) => {
-      if (String(event.data?.requestId || "") !== requestId) return;
-      if (settled) return;
-      settled = true;
-      finish();
-      if (event.data?.success) {
-        let parsedResult = event.data.result;
-        if (typeof parsedResult === "string") {
-          try {
-            parsedResult = JSON.parse(parsedResult);
-          } catch (e) {
-            console.error("Failed to parse worker result", e);
-          }
-        }
-        resolve(parsedResult as MasterWorkbookPayload);
-      } else {
-        reject(
-          new Error(event.data?.error || "Không thể xử lý file Master."),
-        );
-      }
-    };
-    worker.onerror = (event) => {
-      if (settled) return;
-      settled = true;
-      finish();
-      reject(
-        new Error(
-          event.message || "Master Import Worker đã dừng bất thường.",
-        ),
-      );
-    };
-    worker.postMessage({
-      requestId,
-      file,
-      isMktFile,
-      targetFields,
-      includeRows,
-    });
-  });
-}
-
-const LARGE_LOOP_YIELD_INTERVAL = 200;
-
-function yieldToBrowser(signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
-      error.name = "AbortError";
-      reject(error);
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      signal?.removeEventListener("abort", handleAbort);
-      resolve();
-    }, 0);
-    const handleAbort = () => {
-      window.clearTimeout(timeoutId);
-      const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
-      error.name = "AbortError";
-      reject(error);
-    };
-    signal?.addEventListener("abort", handleAbort, { once: true });
+    pendingMasterRequests.set(requestId, { resolve, reject });
+    worker.postMessage({ requestId, file, isMktFile, targetFields });
   });
 }
 
@@ -296,8 +202,9 @@ export function AEDataConfig({
   const [processingMessage, setProcessingMessage] = useState("");
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pendingProcessingIdsRef = useRef<string[]>([]);
-  const processingAbortRef = useRef<AbortController | null>(null);
+  const preparedMasterFilesRef = useRef(
+    new Map<string, MasterWorkbookPayload>(),
+  );
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
   const [choices, setChoices] = useState<
     { file: File; action: "update" | "new" | "skip"; targetId?: string }[]
@@ -324,38 +231,12 @@ export function AEDataConfig({
     );
   }, [pendingUploads]);
 
-  useEffect(() => {
-    return () => {
-      processingAbortRef.current?.abort();
-      processingAbortRef.current = null;
-    };
-  }, []);
-
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState<number | typeof Infinity>(
-    () => {
-      if (typeof window === "undefined") return 50;
-      const savedValue = window.localStorage.getItem(
-        "master_ae_upload_items_per_page",
-      );
-      if (savedValue === "all") return Infinity;
-      const parsedValue = Number(savedValue);
-      return Number.isFinite(parsedValue) && parsedValue > 0
-        ? parsedValue
-        : 50;
-    },
-  );
-
-  useEffect(() => {
-    window.localStorage.setItem(
-      "master_ae_upload_items_per_page",
-      itemsPerPage === Infinity ? "all" : String(itemsPerPage),
-    );
-  }, [itemsPerPage]);
+  const itemsPerPage = 50;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -395,7 +276,6 @@ export function AEDataConfig({
     "Charge Discovery Camp",
     "Charge Summer Outing",
     "Charge Summer Instructors",
-    "Extra Summer Instructors",
     "TOTAL PAYMENT",
     "Center",
   ];
@@ -473,34 +353,13 @@ export function AEDataConfig({
       (row.month || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
   );
 
-  const totalPages =
-    itemsPerPage === Infinity
-      ? 1
-      : Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
-  const paginatedData =
-    itemsPerPage === Infinity
-      ? filteredData
-      : filteredData.slice(
-          (currentPage - 1) * itemsPerPage,
-          currentPage * itemsPerPage,
-        );
-  const displayedRangeStart =
-    filteredData.length === 0
-      ? 0
-      : itemsPerPage === Infinity
-        ? 1
-        : (currentPage - 1) * itemsPerPage + 1;
-  const displayedRangeEnd =
-    itemsPerPage === Infinity
-      ? filteredData.length
-      : Math.min(currentPage * itemsPerPage, filteredData.length);
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(Math.max(page, 1), totalPages));
-  }, [totalPages]);
+  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+  const paginatedData = filteredData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
 
   const clearPageData = () => {
-    pendingProcessingIdsRef.current = [];
     updateAppData((prev) => ({
       ...prev,
       Ae_Global_Inputs: [],
@@ -518,6 +377,7 @@ export function AEDataConfig({
       // Keep SavedPeriods_HoldAdd or clear it? 
       // Based on "xóa toàn bộ dữ liệu", clearing everything is safer.
       SavedPeriods_HoldAdd: {},
+      Q_Roster: [],
       Q_Salary_Scale: [],
       Q_Staff: [],
       Q_Cache: [],
@@ -542,9 +402,6 @@ export function AEDataConfig({
 
   const deleteRow = (id: string | undefined) => {
     if (!id) return;
-    pendingProcessingIdsRef.current = pendingProcessingIdsRef.current.filter(
-      (queuedId) => queuedId !== id,
-    );
     updateAppData((prev) => ({
       ...prev,
       Ae_Global_Inputs: prev.Ae_Global_Inputs.filter((row) => row.id !== id),
@@ -614,36 +471,16 @@ export function AEDataConfig({
       return;
     }
 
-    processingAbortRef.current?.abort();
-    const uploadController = new AbortController();
-    processingAbortRef.current = uploadController;
-
     setIsProcessing(true);
     setProcessingMessage("Đang tự động map cột...");
-    updateAppData(
-      (prev) => ({
-        ...prev,
-        Ae_Global_Inputs: prev.Ae_Global_Inputs.map((row) =>
-          row.id === id ? { ...row, status: "processing" } : row,
-        ),
-      }),
-      false,
-    );
     try {
       const guessedBank = guessBank(file.name);
       const parsed = await parseMasterFileInWorker(
         file,
         guessedBank === "MKT LOCAL NORTH",
         masterAeFields,
-        false,
-        uploadController.signal,
       );
-      pendingProcessingIdsRef.current = [
-        ...pendingProcessingIdsRef.current.filter(
-          (queuedId) => queuedId !== id,
-        ),
-        id,
-      ];
+      preparedMasterFilesRef.current.set(id, parsed);
 
       updateAppData((prev) => ({
         ...prev,
@@ -653,7 +490,7 @@ export function AEDataConfig({
                 ...row,
                 fileObj: file,
                 name: file.name,
-                status: "ready",
+                status: "Uploaded",
                 bank: guessedBank || row.bank,
                 month:
                   parseMonthFromFileName(file.name) ||
@@ -666,27 +503,9 @@ export function AEDataConfig({
       }), false);
       toast.success(`Đã tải lên và tự động map cột cho file: ${file.name}`);
     } catch (error: any) {
-      if (error?.name === "AbortError" || uploadController.signal.aborted) {
-        return;
-      }
-      const errorMessage = error?.message || String(error);
-      updateAppData(
-        (prev) => ({
-          ...prev,
-          Ae_Global_Inputs: prev.Ae_Global_Inputs.map((row) =>
-            row.id === id
-              ? { ...row, status: `Error: ${errorMessage}` }
-              : row,
-          ),
-        }),
-        false,
-      );
-      toast.error(`Lỗi đọc ${file.name}: ${errorMessage}`);
+      toast.error(`Lỗi đọc ${file.name}: ${error?.message || String(error)}`);
     } finally {
-      if (processingAbortRef.current === uploadController) {
-        processingAbortRef.current = null;
-        setIsProcessing(false);
-      }
+      setIsProcessing(false);
     }
   };
 
@@ -832,11 +651,8 @@ export function AEDataConfig({
       columnMapping?: Record<string, string>;
       status: string;
     }[] = [];
-    const queuedIds: string[] = [];
-
-    processingAbortRef.current?.abort();
-    const uploadController = new AbortController();
-    processingAbortRef.current = uploadController;
+    const preparedById = new Map<string, MasterWorkbookPayload>();
+    const processTargetIds = new Set<string>();
 
     setIsProcessing(true);
     setProcessingMessage("Đang tự động map cột...");
@@ -862,7 +678,7 @@ export function AEDataConfig({
           ? choice.targetId
           : `${Date.now()}-${index}-${crypto.randomUUID()}`;
       let parsed: MasterWorkbookPayload | undefined;
-      let status = "ready";
+      let status = "Uploaded";
 
       setProcessingMessage(
         `Đang đọc file ${index + 1}/${activeChoices.length}: ${choice.file.name}`,
@@ -877,18 +693,11 @@ export function AEDataConfig({
           choice.file,
           guessedBank === "MKT LOCAL NORTH",
           masterAeFields,
-          false,
-          uploadController.signal,
         );
-        queuedIds.push(id);
+        preparedById.set(id, parsed);
+        preparedMasterFilesRef.current.set(id, parsed);
+        processTargetIds.add(id);
       } catch (error: any) {
-        if (error?.name === "AbortError" || uploadController.signal.aborted) {
-          if (processingAbortRef.current === uploadController) {
-            processingAbortRef.current = null;
-            setIsProcessing(false);
-          }
-          return;
-        }
         status = `Error: ${error?.message || String(error)}`;
       }
 
@@ -913,23 +722,22 @@ export function AEDataConfig({
       }
     }
 
-    const updatesById = new Map(updates.map((update) => [update.id, update]));
     const nextInputs = appData.Ae_Global_Inputs.map((row) => {
-      const update = updatesById.get(row.id);
-      return update
-        ? {
-            ...row,
-            fileObj: update.file,
-            status: update.status,
-            bank: update.bank || row.bank,
-            month:
-              parseMonthFromFileName(update.file.name) ||
-              appData.globalMonth ||
-              row.month,
-            columnMapping: update.columnMapping,
-          }
-        : row;
-    }).concat(newRows);
+        const update = updates.find((u) => u.id === row.id);
+        return update
+          ? {
+              ...row,
+              fileObj: update.file,
+              status: update.status,
+              bank: update.bank || row.bank,
+              month:
+                parseMonthFromFileName(update.file.name) ||
+                appData.globalMonth ||
+                row.month,
+              columnMapping: update.columnMapping,
+            }
+          : row;
+      }).concat(newRows);
 
     updateAppData(
       (prev) => ({
@@ -941,57 +749,32 @@ export function AEDataConfig({
 
     setShowDialog(false);
     setPendingUploads([]);
-    setChoices([]);
-    setProgress(0);
-    setProcessingMessage("");
-    if (processingAbortRef.current === uploadController) {
-      processingAbortRef.current = null;
+    const successfulTargets = nextInputs.filter(
+      (row) => row.fileObj && processTargetIds.has(row.id),
+    );
+    if (successfulTargets.length === 0) {
       setIsProcessing(false);
-    }
-
-    if (queuedIds.length === 0) {
       toast.error("Không có file hợp lệ để xử lý.");
       return;
     }
 
-    const queuedIdSet = new Set(queuedIds);
-    pendingProcessingIdsRef.current = [
-      ...pendingProcessingIdsRef.current.filter(
-        (queuedId) => !queuedIdSet.has(queuedId),
-      ),
-      ...queuedIds,
-    ];
-
     toast.success(
-      `Đã tải và tự động map ${queuedIds.length}/${newRows.length + updates.length} file. Bấm “Xử lý” để tổng hợp lần lượt theo thứ tự tải lên.`,
+      `Đã đọc ${successfulTargets.length}/${newRows.length + updates.length} file. Bắt đầu tổng hợp dữ liệu.`,
     );
+    await processAEData(successfulTargets, preparedById);
   };
 
-  const processAEData = async (targetOverride?: AERow[]) => {
-    const availableRowsById = new Map(
-      appData.Ae_Global_Inputs.map((row) => [row.id, row]),
+  const processAEData = async (
+    targetOverride?: AERow[],
+    preparedOverride?: Map<string, MasterWorkbookPayload>,
+  ) => {
+    const targets = (targetOverride || appData.Ae_Global_Inputs).filter(
+      (item) => item.fileObj,
     );
-    const queuedTargets = pendingProcessingIdsRef.current
-      .map((id) => availableRowsById.get(id))
-      .filter((row): row is AERow => Boolean(row?.fileObj));
-    const readyTargets = appData.Ae_Global_Inputs.filter(
-      (row) => row.fileObj && row.status === "ready",
-    );
-    const targets = (
-      targetOverride ||
-      (queuedTargets.length > 0
-        ? queuedTargets
-        : readyTargets.length > 0
-          ? readyTargets
-          : appData.Ae_Global_Inputs)
-    ).filter((item) => item.fileObj);
     if (targets.length === 0) {
       toast.error("Vui lòng chọn ít nhất một File AE Final!");
       return;
     }
-    let hasNonMktTargets = targets.some(
-      (target) => !isMktMasterInput(target),
-    );
 
     const normalizeMonth = (m: any) => {
       const str = String(m || "").trim().toUpperCase();
@@ -1021,16 +804,10 @@ export function AEDataConfig({
     ) => {
       if (mapping && mapping[targetField]) {
         const mappedHeader = mapping[targetField].toUpperCase().trim();
-        const isUnsafeMktMapping =
-          targetField === "Charge MKT Local" &&
-          !mappedHeader.includes("MKT") &&
-          !mappedHeader.includes("MARKETING");
-        if (!isUnsafeMktMapping) {
-          const idx = headers.findIndex(
-            (h) => String(h).toUpperCase().trim() === mappedHeader,
-          );
-          if (idx !== -1) return idx;
-        }
+        const idx = headers.findIndex(
+          (h) => String(h).toUpperCase().trim() === mappedHeader,
+        );
+        if (idx !== -1) return idx;
       }
       
       // 1. Exact Match on targetField
@@ -1060,11 +837,6 @@ export function AEDataConfig({
       return -1;
     };
 
-    processingAbortRef.current?.abort();
-    const processingController = new AbortController();
-    processingAbortRef.current = processingController;
-    const processingSignal = processingController.signal;
-
     setIsProcessing(true);
     setProgress(0);
     setProcessingMessage("Đang chuẩn bị xử lý dữ liệu AE...");
@@ -1079,9 +851,11 @@ export function AEDataConfig({
       const holdData: any[] = [];
       const soSanhAeData: any[] = [];
       const rosterDataToAppend: any[] = [];
-      const detectedMktTargetIds = new Set<string>();
       const statusById = new Map<string, string>();
-      let sheet1Headers = [
+      const preparedFiles =
+        preparedOverride || preparedMasterFilesRef.current;
+
+      const sheet1Headers = [
         "No.",
         "Tháng báo cáo",
         "L07",
@@ -1105,7 +879,6 @@ export function AEDataConfig({
         "Charge Discovery Camp",
         "Charge Summer Outing",
         "Charge Summer Instructors",
-        "Extra Summer Instructors",
         "TOTAL PAYMENT",
         "TÊN FILE",
         "Center",
@@ -1127,19 +900,22 @@ export function AEDataConfig({
         );
         await new Promise((resolve) => setTimeout(resolve, 10));
 
-        const isMktFile = isMktMasterInput(item);
+        const isMktFile =
+          String(item.bank || "").toUpperCase().includes("MKT") ||
+          String(item.name || "").toUpperCase().includes("MKT") ||
+          String(item.name || "").toUpperCase().includes("MARKETING");
 
         const effectiveBank = isMktFile ? "MKT LOCAL NORTH" : item.bank || "";
 
         try {
-          const parsedWorkbook = await parseMasterFileInWorker(
-            item.fileObj,
-            isMktFile,
-            masterAeFields,
-            true,
-            processingSignal,
-          );
-          await yieldToBrowser(processingSignal);
+          const parsedWorkbook =
+            preparedFiles.get(item.id) ||
+            (await parseMasterFileInWorker(
+              item.fileObj,
+              isMktFile,
+              masterAeFields,
+            ));
+          preparedMasterFilesRef.current.set(item.id, parsedWorkbook);
           const itemColumnMapping =
             item.columnMapping && Object.keys(item.columnMapping).length > 0
               ? item.columnMapping
@@ -1158,47 +934,30 @@ export function AEDataConfig({
               const normalizedSheetName = normalizeMasterSheetName(sheetName);
               let sheetProcessed = false;
 
-              const detectedSheetKind = detectMasterSheetKind(sheetName, rows);
-              const isRosterSheet =
-                isRosterMasterSheetName(sheetName) || detectedSheetKind === "roster";
-              const isBankSheet =
-                isBankMasterSheetName(sheetName) || detectedSheetKind === "bank";
-              const isHoldSheet =
-                isHoldMasterSheetName(sheetName) || detectedSheetKind === "hold";
-              const isSheetOneSheet =
-                isSheetOneMasterSheetName(sheetName) || detectedSheetKind === "sheet1";
+              const isRosterSheet = isRosterMasterSheetName(sheetName);
+              const isBankSheet = isBankMasterSheetName(sheetName);
+              const isHoldSheet = isHoldMasterSheetName(sheetName);
+              const isSheetOneSheet = isSheetOneMasterSheetName(sheetName);
 
-              // Roster/Q_Roster belongs only to the MKT Local input. A Gross
-              // Pay workbook may contain another sheet with a similar name;
-              // it must not change the original Sheet 1 processing path.
-              if (isMktFile && isRosterSheet) {
-                detectedMktTargetIds.add(item.id);
+              if (isRosterSheet) {
                 let headerRowIndex = -1;
                 for (let r = 0; r < Math.min(30, rows.length); r++) {
                   const rowStr = rows[r]
                     .map((c) => String(c || "").toUpperCase())
                     .join(" ");
-                  const isMktRosterHeader =
-                    (rowStr.includes("CHARGE TO CENTER") ||
-                      rowStr.includes("CHARGETOCENTER")) &&
-                    rowStr.includes("TYPE") &&
-                    (rowStr.includes("DURATION") ||
-                      rowStr.includes("HOURS") ||
-                      rowStr.includes("SỐ GIỜ"));
                   if (
-                    isMktRosterHeader ||
-                    ((rowStr.includes("FULL NAME") ||
+                    (rowStr.includes("FULL NAME") ||
                       rowStr.includes("HỌ VÀ TÊN") ||
                       rowStr.includes("HỌ TÊN") ||
                       rowStr.includes("TÊN") ||
                       rowStr.includes("NAME")) &&
-                      (rowStr.includes("ID") ||
-                        rowStr.includes("MÃ NV") ||
-                        rowStr.includes("MANV") ||
-                        rowStr.includes("DATE") ||
-                        rowStr.includes("NGÀY") ||
-                        rowStr.includes("TYPE") ||
-                        rowStr.includes("CLASS")))
+                    (rowStr.includes("ID") ||
+                      rowStr.includes("MÃ NV") ||
+                      rowStr.includes("MANV") ||
+                      rowStr.includes("DATE") ||
+                      rowStr.includes("NGÀY") ||
+                      rowStr.includes("TYPE") ||
+                      rowStr.includes("CLASS"))
                   ) {
                     headerRowIndex = r;
                     break;
@@ -1217,33 +976,22 @@ export function AEDataConfig({
                 const iId = getColIndex(h, "ID Number", {}, ["ID", "MÃ NV", "MANV", "TEACHER ID", "EMP ID", "CODE"]);
                 const iName = getColIndex(h, "Full name", {}, ["FULL NAME", "NAME", "HỌ VÀ TÊN", "TÊN", "HỌ TÊN"]);
                 const iDate = getColIndex(h, "Date", {}, ["DATE", "NGÀY", "TK_DATE", "SESSION DATE", "DAY"]);
-                const iType = findExactRosterColumn(h, ["TYPE"]);
+                const iType = getColIndex(h, "Type", {}, ["TYPE", "TASK TYPE", "CODE", "LOẠI", "ACTIVITY", "TASKTYPE"]);
                 const iClass = getColIndex(h, "Class", {}, ["CLASS", "LỚP", "CLASS CODE", "MÃ LỚP"]);
                 const iFrom = getColIndex(h, "From", {}, ["FROM", "START", "START TIME", "TỪ"]);
                 const iTo = getColIndex(h, "To", {}, ["TO", "END", "END TIME", "ĐẾN"]);
-                const iDuration = findExactRosterColumn(h, ["DURATION"]);
+                const iDuration = getColIndex(h, "Duration", {}, ["DURATION", "HOURS", "SỐ GIỜ", "GIỜ", "TK_DURATION", "TOTAL HOURS"]);
                 const iNotes = getColIndex(h, "Notes", {}, ["NOTES", "NOTE", "GHI CHÚ", "REMARKS"]);
-                const iChargeMkt = findExactRosterColumn(h, [
-                  "CHARGE TO CENTER",
-                  "CHARGE TO CENTER MKT",
-                  "CHARGETOCENTERCODE",
-                ]);
-
-                if (iType === -1 || iDuration === -1 || iChargeMkt === -1) {
-                  throw new Error(
-                    `Sheet ${sheetName} phải có đúng các cột TYPE, DURATION và CHARGE TO CENTER.`,
-                  );
-                }
+                const iChargeMkt = getColIndex(h, "Charge To Center MKT", {}, ["CHARGE TO CENTER MKT", "CHARGE TO CENTER", "CHARGETOCENTER"]);
 
                 for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                  if (
-                    r > headerRowIndex + 1 &&
-                    (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
-                  ) {
-                    await yieldToBrowser(processingSignal);
-                  }
                   const row = rows[r];
                   if (!row || row.every((cell) => cell === "")) continue;
+
+                  const rawCenter = iCenter !== -1 && row[iCenter] !== undefined ? String(row[iCenter]).trim() : "";
+                  const info = getCenterInfoByAECode(rawCenter);
+                  const l07 = info?.l07 || rawCenter || "UNKNOWN";
+                  const business = info?.bus || "";
 
                   const ma_nv = iId !== -1 && row[iId] !== undefined ? String(row[iId]).trim() : "";
                   const full_name = iName !== -1 && row[iName] !== undefined ? String(row[iName]).trim() : "";
@@ -1257,24 +1005,14 @@ export function AEDataConfig({
                   const duration = parseDurationToHours(rawDuration);
 
                   const notes = iNotes !== -1 && row[iNotes] !== undefined ? String(row[iNotes]).trim() : "";
-                  const rawChargeToCenter = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
-                  const rawCenter = iCenter !== -1 && row[iCenter] !== undefined ? String(row[iCenter]).trim() : "";
-                  const rawCenterForL07 = rawChargeToCenter || rawCenter;
-                  const resolvedRosterCenter = resolveMktRosterCenter(rawCenterForL07);
-                  const chargeToCenterMkt = resolvedRosterCenter.chargeToCenterMkt;
-                  const l07 = resolvedRosterCenter.l07 || "UNKNOWN";
-                  const business = resolvedRosterCenter.business;
-                  const reportMonth = normalizeMonth(itemMonth);
+                  const chargeToCenterMkt = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
 
                   rosterDataToAppend.push({
                     _rowId: crypto.randomUUID(),
                     _sourceFile: item.name || "",
                     center: rawCenter,
                     l07,
-                    L07: l07,
-                    bu: business,
                     business,
-                    Business: business,
                     ma_nv,
                     full_name,
                     ngay,
@@ -1283,17 +1021,8 @@ export function AEDataConfig({
                     gio_vao,
                     gio_ra,
                     duration,
-                    DURATION: duration,
-                    calculatedSalary: duration * 20000,
-                    _durationUnit: "hours",
                     notes,
                     chargeToCenterMkt,
-                    chargeToCenterCode: rawCenterForL07,
-                    "CHARGE TO CENTER": rawCenterForL07,
-                    month: reportMonth,
-                    _fileMonth: reportMonth,
-                    "Tháng": reportMonth,
-                    Type: type,
                     employeeId: ma_nv,
                     fullName: full_name,
                     maAE: rawCenter,
@@ -1388,12 +1117,6 @@ export function AEDataConfig({
                   ]);
 
                   for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                    if (
-                      r > headerRowIndex + 1 &&
-                      (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
-                    ) {
-                      await yieldToBrowser(processingSignal);
-                    }
                     const row = rows[r];
                     if (!row || row.every((cell) => cell === "")) continue;
 
@@ -1500,9 +1223,18 @@ export function AEDataConfig({
               }
 
               if (
-                isBonusMasterSheetName(sheetName)
+                !isMktFile &&
+                (normalizedSheetName.includes("SUMMER") ||
+                  normalizedSheetName.includes("BONUS"))
               ) {
-                const headerRowIndex = findBonusMasterHeaderRow(rows, 100);
+                let headerRowIndex = -1;
+                for (let r = 0; r < Math.min(50, rows.length); r++) {
+                  const rowStr = rows[r].map(c => String(c || "").toUpperCase()).join(" ");
+                  if (rowStr.includes("BONUS") && (rowStr.includes("INSTRUCTOR") || rowStr.includes("CENTER"))) {
+                    headerRowIndex = r;
+                    break;
+                  }
+                }
 
                 if (headerRowIndex !== -1) {
                   foundAnySheet = true;
@@ -1512,34 +1244,10 @@ export function AEDataConfig({
                   const iCenter = getColIndex(h, "Center", itemColumnMapping, ["NORTH CENTER", "DEPARTMENT NAME", "CENTER", "CENTER NOTE", "CENTERS", "TRUNG TÂM", "MÃ AE", "L07"]);
                   const iName = getColIndex(h, "Full name", itemColumnMapping, ["HỌ & TÊN INSTRUCTOR", "NAME", "INSTRUCTOR"]);
                   const iId = getColIndex(h, "ID Number", itemColumnMapping, ["SỐ CCCD INSTRUCTOR", "ID NUMBER", "CCCD"]);
-                  const detectedBonusIndex = findBonusAmountColumn(h);
-                  const iBonus =
-                    detectedBonusIndex !== -1
-                      ? detectedBonusIndex
-                      : getColIndex(
-                          h,
-                          "TOTAL PAYMENT",
-                          itemColumnMapping,
-                          [
-                            "BONUS",
-                            "BONUS AMOUNT",
-                            "TOTAL BONUS",
-                            "AMOUNT",
-                            "SỐ TIỀN BONUS",
-                            "SỐ TIỀN THƯỞNG",
-                            "TIỀN THƯỞNG",
-                            "THƯỞNG",
-                          ],
-                        );
+                  const iBonus = getColIndex(h, "TOTAL PAYMENT", itemColumnMapping, ["BONUS"]);
                   const iEmail = getColIndex(h, "Email", itemColumnMapping, ["INSTRUCTOR'S EMAIL", "EMAIL"]);
 
                   for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                    if (
-                      r > headerRowIndex + 1 &&
-                      (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
-                    ) {
-                      await yieldToBrowser(processingSignal);
-                    }
                     const row = rows[r];
                     if (!row || row.every(cell => cell === "")) continue;
 
@@ -1750,12 +1458,6 @@ export function AEDataConfig({
                   ]);
 
                   for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                    if (
-                      r > headerRowIndex + 1 &&
-                      (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
-                    ) {
-                      await yieldToBrowser(processingSignal);
-                    }
                     const row = rows[r];
                     if (!row || row.length < 3) continue;
 
@@ -1883,12 +1585,6 @@ export function AEDataConfig({
                   }
 
                   for (let r = 0; r < rows.length; r++) {
-                    if (
-                      r > 0 &&
-                      r % LARGE_LOOP_YIELD_INTERVAL === 0
-                    ) {
-                      await yieldToBrowser(processingSignal);
-                    }
                     const row = rows[r];
                     if (!row || row.length === 0) continue;
 
@@ -1981,31 +1677,9 @@ export function AEDataConfig({
                   const h = rows[headerRowIndex].map((c) =>
                     String(c || "").trim(),
                   );
-                  const sourceChargeColumns =
-                    getGrossPaySourceChargeColumns(h);
-                  sheet1Headers = mergeGrossPayHeaders(
-                    sheet1Headers,
-                    sourceChargeColumns.map((column) => column.outputHeader),
-                  );
-                  const sourceChargeColumnsByOutput = new Map<
-                    string,
-                    number[]
-                  >();
-                  sourceChargeColumns.forEach((column) => {
-                    const indexes =
-                      sourceChargeColumnsByOutput.get(column.outputHeader) || [];
-                    indexes.push(column.sourceIndex);
-                    sourceChargeColumnsByOutput.set(column.outputHeader, indexes);
-                  });
                   const colIndices: Record<string, number> = {};
                   sheet1Headers.forEach((th) => {
                     if (th === "L07" || th === "Business") return;
-
-                    if (isGrossPayChargeAmountColumn(th)) {
-                      colIndices[th] =
-                        sourceChargeColumnsByOutput.get(th)?.[0] ?? -1;
-                      return;
-                    }
 
                     const fuzzyMap: Record<string, string[]> = {
                       "Full name": ["FULL NAME", "HỌ VÀ TÊN", "TÊN NHÂN VIÊN"],
@@ -2107,12 +1781,6 @@ export function AEDataConfig({
                   }
 
                   for (let r = headerRowIndex + 1; r < rows.length; r++) {
-                    if (
-                      r > headerRowIndex + 1 &&
-                      (r - headerRowIndex) % LARGE_LOOP_YIELD_INTERVAL === 0
-                    ) {
-                      await yieldToBrowser(processingSignal);
-                    }
                     const row = rows[r];
                     // const idxTP = colIndices["TOTAL PAYMENT"];
                     // const rawTP =
@@ -2148,15 +1816,8 @@ export function AEDataConfig({
                     const idxT = colIndices["TOTAL PAYMENT"];
                     const rawTP = idxT !== -1 ? row[idxT] : 0;
                     const numTP = parseMoneyToNumber(rawTP);
-                    const sourceChargeTotal = sourceChargeColumns.reduce(
-                      (sum, column) =>
-                        sum + parseMoneyToNumber(row[column.sourceIndex]),
-                      0,
-                    );
 
-                    if (!accVal && numTP === 0 && sourceChargeTotal === 0) {
-                      continue;
-                    }
+                    if (!accVal && numTP === 0) continue;
 
                     if (
                       (nameVal !== "" || idxName === -1)
@@ -2165,17 +1826,8 @@ export function AEDataConfig({
                       sheet1Headers.forEach((th) => {
                         if (th === "L07" || th === "Business") return;
                         const idx = colIndices[th];
-                        const chargeIndexes =
-                          sourceChargeColumnsByOutput.get(th) || [];
-                        let val = isGrossPayChargeAmountColumn(th)
-                          ? chargeIndexes.reduce(
-                              (sum, sourceIndex) =>
-                                sum + parseMoneyToNumber(row[sourceIndex]),
-                              0,
-                            )
-                          : idx !== -1 && row[idx] !== undefined
-                            ? row[idx]
-                            : "";
+                        let val =
+                          idx !== -1 && row[idx] !== undefined ? row[idx] : "";
 
                         const valStr = String(val).toUpperCase().trim();
                         if (
@@ -2189,25 +1841,6 @@ export function AEDataConfig({
 
                         if (th === "Bank Account Number") {
                           val = accVal;
-                        } else if (th === "ID Number") {
-                          val = cleanIDNumber(val);
-                        } else if (th === "Full name") {
-                          val = nameVal;
-                        } else if (
-                          [
-                            "Salary Scale",
-                            "From",
-                            "To",
-                            "Bank Name",
-                            "CITAD code",
-                            "TAX CODE",
-                            "Contract No",
-                            "Center",
-                          ].includes(th)
-                        ) {
-                          val = val === null || val === undefined
-                            ? ""
-                            : String(val).trim();
                         } else if (isMoneyColumn(th)) {
                           val = parseMoneyToNumber(val);
                         }
@@ -2215,28 +1848,16 @@ export function AEDataConfig({
                         obj[th] = val;
                       });
 
-                      // CENTER in Sheet 1 is authoritative for the MKT rule.
-                      // Fall back to the legacy L07/AE detector only when the
-                      // file does not contain a CENTER column.
-                      const explicitCenterColIndex =
-                        colIndices["Center"] ?? -1;
                       const rawCenterVal =
-                        explicitCenterColIndex !== -1
-                          ? String(row[explicitCenterColIndex] || "").trim()
-                          : centerColIndex !== -1
-                            ? String(row[centerColIndex] || "").trim()
-                            : "";
+                        centerColIndex !== -1
+                          ? String(row[centerColIndex] || "").trim()
+                          : "";
                       obj["_rawAE"] = rawCenterVal;
 
                       let l07 = rawCenterVal;
                       let business = "";
-                      const northMktL07 =
-                        resolveNorthMktLocalL07(rawCenterVal);
 
-                      if (northMktL07) {
-                        l07 = northMktL07;
-                        business = getBusinessFromL07(northMktL07);
-                      } else if (rawCenterVal) {
+                      if (rawCenterVal) {
                         const rawCenterKey = rawCenterVal.toLowerCase();
                         if (aeMap[rawCenterKey]) {
                           const mappedName = aeMap[rawCenterKey].name;
@@ -2261,12 +1882,10 @@ export function AEDataConfig({
                         }
                       }
 
-                      // Sheet 1 / Gross Pay MKT mapping has priority over the
-                      // generic Center resolver. These processed L07/Business
-                      // values are sent to Pivot Master in the same run.
-                      if (northMktL07) {
-                        l07 = northMktL07;
-                        business = getBusinessFromL07(northMktL07);
+                      // OVERRIDE FOR MKT
+                      if (rawCenterVal.toUpperCase().trim() === "MKT LOCAL NORTH") {
+                        l07 = "MKT LOCAL NORTH";
+                        business = "AHN";
                       } else {
                         const mktRes3 = resolveMktAndCenterL07(rawCenterVal, "", item.name || "", l07);
                         if (mktRes3.isMktLocal) {
@@ -2278,9 +1897,6 @@ export function AEDataConfig({
                       obj["L07"] = l07;
                       obj["Business"] = business;
                       obj["TÊN FILE"] = item.name || "";
-                      obj["_sourceFile"] = item.name || "";
-                      obj["_sourceSheet"] = sheetName;
-                      obj["_sourceRow"] = r + 1;
                       obj["_fileBank"] = effectiveBank;
                       obj["_fileMonth"] = normalizeMonth(itemMonth);
                       obj["Tháng báo cáo"] = normalizeMonth(itemMonth);
@@ -2294,9 +1910,6 @@ export function AEDataConfig({
                 foundAnySheet = true;
                 sheetProcessed = true;
                 for (let r = 1; r < rows.length; r++) {
-                  if (r % LARGE_LOOP_YIELD_INTERVAL === 0) {
-                    await yieldToBrowser(processingSignal);
-                  }
                   const row = rows[r];
                   soSanhAeData.push({
                     "ID Number": row[0] || "",
@@ -2310,9 +1923,6 @@ export function AEDataConfig({
 
               if (sheetProcessed) fileProcessedSuccessfully = true;
             } catch (sheetError: any) {
-              if (sheetError?.name === "AbortError" || processingSignal.aborted) {
-                throw sheetError;
-              }
               console.error(
                 `Lỗi xử lý sheet ${sheetName} trong file ${item.name}:`,
                 sheetError,
@@ -2323,17 +1933,13 @@ export function AEDataConfig({
           if (fileProcessedSuccessfully) {
             statusById.set(item.id, "Success");
           } else {
-            const availableSheets = parsedWorkbook.sheetNames.join(", ");
-            statusById.set(
-              item.id,
-              `Error: Không nhận diện được cấu trúc sheet${availableSheets ? ` (${availableSheets})` : ""}`,
-            );
+            statusById.set(item.id, "Error: Invalid format");
           }
         } catch (e: any) {
-          if (e?.name === "AbortError" || processingSignal.aborted) {
-            throw e;
-          }
           statusById.set(item.id, `Error: ${e.message}`);
+        } finally {
+          preparedMasterFilesRef.current.delete(item.id);
+          preparedFiles.delete(item.id);
         }
       }
 
@@ -2357,25 +1963,48 @@ export function AEDataConfig({
       setProcessingMessage("Đang tổng hợp và khử trùng dữ liệu...");
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      const isProcessedMktTarget = (target: AERow) =>
-        isMktMasterInput(target) || detectedMktTargetIds.has(target.id);
-      hasNonMktTargets = targets.some(
-        (target) => !isProcessedMktTarget(target),
-      );
-
       const finalSheet1Data: any[] = [];
       const seenSheet1Keys = new Set();
-      sheet1Data.forEach((row) => {
-        const l07Upper = String(row["L07"] || "").trim().toUpperCase();
-        finalizeGrossPayAmounts(
-          row,
-          sheet1Headers,
-          isNorthMktLocalL07(l07Upper),
-        );
+      const chargeCols = [
+        "CHARGE TO LXO",
+        "CHARGE TO EC",
+        "CHARGE TO PT-DEMO",
+        "Charge MKT Local",
+        "CHARGE TO OTHER",
+        "Charge Renewal Projects",
+        "Charge Discovery Camp",
+        "Charge Summer Outing",
+        "Charge Summer Instructors",
+      ];
 
+      sheet1Data.forEach((row) => {
+        // TẠI CỘT L07 SẼ CHUYỂN HẾT SỐ LIỆU TỪ CỘT OTHER VỀ CỘT CHARGE MKT LOCAL
+        const l07Upper = String(row["L07"] || "").trim().toUpperCase();
+        if (
+
+          l07Upper === "MKT LOCAL NORTH"
+        ) {
+          const otherAmt = parseMoneyToNumber(row["CHARGE TO OTHER"] || 0);
+          if (otherAmt > 0) {
+            const currentMkt = parseMoneyToNumber(row["Charge MKT Local"] || 0);
+            row["Charge MKT Local"] = currentMkt + otherAmt;
+            row["CHARGE TO OTHER"] = 0;
+          }
+        }
+
+        let calcPayment = 0;
+        chargeCols.forEach(col => {
+          calcPayment += parseMoneyToNumber(row[col] || 0);
+        });
+        row["TOTAL PAYMENT"] = calcPayment;
+
+        const idNum = String(row["ID Number"] || "").trim();
+        const fname = String(row["Full name"] || "").trim();
+        const l07 = String(row["L07"] || "").trim();
         const rowMonth = normalizeMonth(row["Tháng báo cáo"] || row["_fileMonth"] || appData.globalMonth || "03.2026");
         row["Tháng báo cáo"] = rowMonth;
-        const key = getGrossPayRowIdentity(row, rowMonth);
+        const total = calcPayment;
+        const key = `${idNum}|${fname}|${l07}|${rowMonth}|${total}`;
         if (!seenSheet1Keys.has(key)) {
           row.id = crypto.randomUUID();
           finalSheet1Data.push(row);
@@ -2538,61 +2167,6 @@ export function AEDataConfig({
       });
       const verifiedHoldData = finalHoldData;
 
-      const normalizeSourceFile = (value: unknown) =>
-        String(value || "").trim().toUpperCase();
-      const refreshedRosterFiles = new Set(
-        targets
-          .filter(isProcessedMktTarget)
-          .flatMap((target) => [target.name, target.fileObj?.name])
-          .map(normalizeSourceFile)
-          .filter(Boolean),
-      );
-      const refreshedSheet1FilesForPivot = new Set(
-        targets
-          .filter((target) => !isProcessedMktTarget(target))
-          .flatMap((target) => [target.name, target.fileObj?.name])
-          .map(normalizeSourceFile)
-          .filter(Boolean),
-      );
-
-      const mergeRosterRows = (existingRows: any[] = []) => {
-        const retainedRows = existingRows.filter((row) => {
-          const sourceFile = normalizeSourceFile(
-            row?._sourceFile || row?.["TÊN FILE"],
-          );
-          const rowId = String(row?._rowId || "").trim().toLowerCase();
-          if (sourceFile === "MOCK_ROSTER.XLSX" || rowId.startsWith("mock-row-")) {
-            return false;
-          }
-          return !sourceFile || !refreshedRosterFiles.has(sourceFile);
-        });
-        return [...retainedRows, ...rosterDataToAppend];
-      };
-
-      const mergeSheet1RowsForPivot = (existingRows: any[] = []) => {
-        const rowsByKey = new Map<string, any>();
-        const currentMonth = appData.globalMonth || "03.2026";
-        const getRowKey = (row: any) => {
-          const month = normalizeMonth(
-            row?.["Tháng báo cáo"] || row?._fileMonth || currentMonth,
-          );
-          return getGrossPayRowIdentity(row, month);
-        };
-
-        existingRows.forEach((row) => {
-          if (!row) return;
-          const sourceFile = normalizeSourceFile(
-            row["TÊN FILE"] || row._sourceFile,
-          );
-          if (sourceFile && refreshedSheet1FilesForPivot.has(sourceFile)) return;
-          rowsByKey.set(getRowKey(row), row);
-        });
-        verifiedSheet1Data.forEach((row) => {
-          if (row) rowsByKey.set(getRowKey(row), row);
-        });
-        return Array.from(rowsByKey.values());
-      };
-
       // Cập nhật map BU, L07 từ Sheet 1 cho Hold Data
       verifiedHoldData.filter(Boolean).forEach((row) => {
         const id = row["ID Number"];
@@ -2603,22 +2177,6 @@ export function AEDataConfig({
       });
 
       updateAppData((prev) => {
-        const nextInputRows = prev.Ae_Global_Inputs.map((row) => ({
-          ...row,
-          status: statusById.get(row.id) || row.status,
-        }));
-
-        // File MKT Local vẫn được phép bổ sung các sheet Bonus vào Hold AE.
-        // Nếu không có Bonus, file MKT chỉ cập nhật Pivot và không làm thay đổi
-        // Bank, Sheet 1, Hold hoặc bảng đối soát.
-        if (!hasNonMktTargets && verifiedHoldData.length === 0) {
-          return {
-            ...prev,
-            Ae_Global_Inputs: nextInputRows,
-            Q_Roster: mergeRosterRows(prev.Q_Roster || []),
-          };
-        }
-
         const currentMonth = prev.globalMonth || "03.2026";
         const existingHoldData = prev.Hold_AE?.data || [];
         const uploadTime = new Date().toISOString();
@@ -2645,18 +2203,11 @@ export function AEDataConfig({
         const holdKeyFn = (r: any) => {
           if (!r) return "";
           const id = String(r["ID Number"] || "").trim().toUpperCase();
-          const fullName = String(r["Full name"] || r["Full Name"] || "")
-            .trim()
-            .toUpperCase();
           const month = normalizeMonth(r["Tháng báo cáo"] || r["_fileMonth"] || currentMonth);
           const tp = Math.round(parseMoneyToNumber(r["TOTAL PAYMENT"] || 0));
           const note = String(r["Note"] || "").trim().toUpperCase();
           const nv = String(r["Nghiệp vụ"] || "").trim().toUpperCase() || "HOLD";
-          const sheetSource = String(r["Sheet Source"] || "").trim().toUpperCase();
-          const fileName = String(r["TÊN FILE"] || r._sourceFile || "")
-            .trim()
-            .toUpperCase();
-          return `${id}|${fullName}|${month}|${tp}|${note}|${nv}|${sheetSource}|${fileName}`;
+          return `${id}|${month}|${tp}|${note}|${nv}`;
         };
 
         // Group and map existing data by ID/Key and Timestamp
@@ -2705,30 +2256,19 @@ export function AEDataConfig({
         // Merge Sheet1_AE with existing data to keep multiple months
         const existingSheet1 = prev.Sheet1_AE?.data || [];
         const sheet1Map = new Map<string, any>();
-        const mergedSheet1Headers = sanitizeGrossPayHeaders(mergeGrossPayHeaders(
-          sheet1Headers,
-          prev.Sheet1_AE?.headers || [],
-        ));
-        const refreshedSheet1Files = new Set(
-          targets
-            .filter((target) => !isMktMasterInput(target))
-            .flatMap((target) => [target.name, target.fileObj?.name])
-            .map((fileName) => String(fileName || "").trim().toUpperCase())
-            .filter(Boolean),
-        );
 
         const getSheet1Key = (r: any) => {
           if (!r) return "";
+          const id = String(r["ID Number"] || "").trim().toUpperCase();
+          const fname = String(r["Full name"] || "").trim().toUpperCase();
+          const l07 = String(r["L07"] || "").trim().toUpperCase();
           const m = normalizeMonth(r["Tháng báo cáo"] || r["_fileMonth"] || currentMonth);
-          return getGrossPayRowIdentity(r, m);
+          const tp = Math.round(parseMoneyToNumber(r["TOTAL PAYMENT"] || 0));
+          return `${id}|${fname}|${l07}|${m}|${tp}`;
         };
 
         existingSheet1.forEach((row) => {
           if (!row) return;
-          const sourceFile = String(row["TÊN FILE"] || row._sourceFile || "")
-            .trim()
-            .toUpperCase();
-          if (sourceFile && refreshedSheet1Files.has(sourceFile)) return;
           const k = getSheet1Key(row);
           if (k) sheet1Map.set(k, row);
         });
@@ -2747,40 +2287,40 @@ export function AEDataConfig({
 
         return {
           ...prev,
-          Ae_Global_Inputs: nextInputRows,
-          Q_Roster: mergeRosterRows(prev.Q_Roster || []),
-          Bank_North_AE: hasNonMktTargets
-            ? {
-                headers: [
-                  "No",
-                  "L07",
-                  "Business",
-                  "ID Number",
-                  "Full name",
-                  "Bank Account Number",
-                  "TOTAL PAYMENT",
-                  "LOẠI CK",
-                  "Payment details",
-                ],
-                data: finalBankData,
-              }
-            : prev.Bank_North_AE,
-          Sheet1_AE: hasNonMktTargets
-            ? { headers: mergedSheet1Headers, data: mergedSheet1Data }
-            : prev.Sheet1_AE,
-          SoSanh_AE: hasNonMktTargets
-            ? {
-                headers: [
-                  "ID Number",
-                  "Full name",
-                  "Sheet 1 AE",
-                  "Bank North AE",
-                  "Chênh Lệch",
-                  "Ghi chú",
-                ],
-                data: finalSoSanhAeData,
-              }
-            : prev.SoSanh_AE,
+          Ae_Global_Inputs: prev.Ae_Global_Inputs.map((row) => ({
+            ...row,
+            status: statusById.get(row.id) || row.status,
+          })),
+          Q_Roster: [
+            ...(prev.Q_Roster || []).filter(r => !targets.some(t => t.name === r._sourceFile)),
+            ...rosterDataToAppend
+          ],
+          Bank_North_AE: {
+            headers: [
+              "No",
+              "L07",
+              "Business",
+              "ID Number",
+              "Full name",
+              "Bank Account Number",
+              "TOTAL PAYMENT",
+              "LOẠI CK",
+              "Payment details",
+            ],
+            data: finalBankData,
+          },
+          Sheet1_AE: { headers: sheet1Headers, data: mergedSheet1Data },
+          SoSanh_AE: {
+            headers: [
+              "ID Number",
+              "Full name",
+              "Sheet 1 AE",
+              "Bank North AE",
+              "Chênh Lệch",
+              "Ghi chú",
+            ],
+            data: finalSoSanhAeData,
+          },
           Hold_AE: {
             headers: [
               "No.",
@@ -2804,81 +2344,74 @@ export function AEDataConfig({
         };
       }, false);
 
-      await yieldToBrowser(processingSignal);
-
-      // Đồng bộ Pivot từ dữ liệu đã xử lý. Không đọc và parse lại toàn bộ file Excel.
+      // Đồng bộ dữ liệu Pivot Master
       try {
-        const pivotSheet1Rows = mergeSheet1RowsForPivot(
-          appData.Sheet1_AE?.data || [],
-        );
-        const pivotRosterRows = mergeRosterRows(appData.Q_Roster || []);
-        let pivotResult: any = null;
-        try {
-          const PivotWorker = (await import("../../workers/pivot.worker?worker")).default;
-          pivotResult = await new Promise((resolve, reject) => {
-            const worker = new PivotWorker();
-            let settled = false;
-            const cleanup = () => {
-              processingSignal.removeEventListener("abort", handleAbort);
-              worker.terminate();
-            };
-            const handleAbort = () => {
-              if (settled) return;
-              settled = true;
-              cleanup();
-              const error = new Error("Đã dừng xử lý vì người dùng rời trang.");
-              error.name = "AbortError";
-              reject(error);
-            };
-            processingSignal.addEventListener("abort", handleAbort, { once: true });
-            worker.onmessage = (e: any) => {
-              if (settled) return;
-              settled = true;
-              cleanup();
-              if (e.data.success) {
-                resolve({
-                  ...e.data.result,
-                  sourceInfo: `Đồng bộ từ ${targets.length} file Master đã xử lý`,
-                });
-              } else {
-                reject(new Error(e.data.error));
-              }
-            };
-            worker.onerror = (err) => {
-              if (settled) return;
-              settled = true;
-              cleanup();
-              reject(err);
-            };
-            worker.postMessage({
-              processedSheet1Rows: pivotSheet1Rows,
-              processedRosterRows: pivotRosterRows,
-            });
-          });
-        } catch (workerError) {
-          if (processingSignal.aborted) throw workerError;
-          console.warn("Lỗi worker pivot, chuyển sang fallback:", workerError);
+        const pivotBuffers: { name: string; bank?: string; buffer: ArrayBuffer }[] = [];
+        for (const item of targets) {
+          if (item.fileObj && item.fileObj instanceof File) {
+            try {
+              const buf = await item.fileObj.arrayBuffer();
+              const upperName = String(item.name || item.fileObj.name).toUpperCase();
+              const pivotBank =
+                String(item.bank || "").toUpperCase().includes("MKT") ||
+                upperName.includes("MKT") ||
+                upperName.includes("MARKETING")
+                  ? "MKT LOCAL NORTH"
+                  : item.bank;
+              pivotBuffers.push({
+                name: item.name || item.fileObj.name,
+                bank: pivotBank,
+                buffer: buf,
+              });
+            } catch (e) {
+              console.warn("Lỗi đọc file buffer cho pivot", e);
+            }
+          }
         }
 
-        await yieldToBrowser(processingSignal);
+        let pivotResult: any = null;
+        if (pivotBuffers.length > 0) {
+          try {
+            const PivotWorker = (await import("../../workers/pivot.worker?worker")).default;
+            pivotResult = await new Promise((resolve, reject) => {
+              const worker = new PivotWorker();
+              worker.onmessage = (e: any) => {
+                worker.terminate();
+                if (e.data.success) {
+                  resolve({
+                    ...e.data.result,
+                    sourceInfo: `Đồng bộ từ ${pivotBuffers.length} file Master`
+                  });
+                } else {
+                  reject(new Error(e.data.error));
+                }
+              };
+              worker.onerror = (err) => {
+                worker.terminate();
+                reject(err);
+              };
+              worker.postMessage(
+                { fileList: pivotBuffers },
+                pivotBuffers.map((item) => item.buffer),
+              );
+            });
+          } catch (wErr) {
+            console.warn("Lỗi worker pivot, chuyển sang fallback:", wErr);
+          }
+        }
+
         if (!pivotResult || !pivotResult.groupedData || Object.keys(pivotResult.groupedData).length === 0) {
-          const fallback = buildPivotFromAppData(
-            pivotSheet1Rows,
-            [],
-            pivotRosterRows,
-          );
+          const fallback = buildPivotFromAppData(verifiedSheet1Data, [], rosterDataToAppend);
           pivotResult = {
             groupedData: fallback.groupedData,
             typeColumns: fallback.typeColumns,
             logs: [],
-            sourceInfo: `Đồng bộ từ ${pivotSheet1Rows.length} dòng Gross Pay và ${pivotRosterRows.length} dòng MKT Local`
+            sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng dữ liệu Sheet 1`
           };
         }
 
         if (pivotResult && pivotResult.groupedData) {
-          await yieldToBrowser(processingSignal);
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
-            cacheVersion: PIVOT_CACHE_VERSION,
             groupedData: pivotResult.groupedData,
             typeColumns: pivotResult.typeColumns,
             diagnosticLogs: pivotResult.logs || [],
@@ -2895,15 +2428,8 @@ export function AEDataConfig({
           }));
         }
       } catch (pivotErr) {
-        if (processingSignal.aborted) throw pivotErr;
         console.error("Error creating pivot master data:", pivotErr);
       }
-
-      const completedTargetIds = new Set(targets.map((row) => row.id));
-      pendingProcessingIdsRef.current =
-        pendingProcessingIdsRef.current.filter(
-          (queuedId) => !completedTargetIds.has(queuedId),
-        );
 
       toast.success(
         `Xử lý xong: ${verifiedSheet1Data.length} Sheet1, ${finalBankData.length} Bank, ${verifiedHoldData.length} Hold.`,
@@ -2921,16 +2447,10 @@ export function AEDataConfig({
         navigate("/master-ae");
       }
     } catch (error: any) {
-      if (error?.name === "AbortError" || processingSignal.aborted) {
-        return;
-      }
       console.error("Error processing AE data:", error);
       toast.error("Lỗi xử lý file: " + error.message);
     } finally {
-      if (processingAbortRef.current === processingController) {
-        processingAbortRef.current = null;
-        setIsProcessing(false);
-      }
+      setIsProcessing(false);
     }
   };
 
@@ -2942,7 +2462,7 @@ export function AEDataConfig({
       className="flex-1 flex flex-col min-h-0 bg-transparent p-4 sm:p-6 md:p-8 items-center overflow-hidden w-full max-w-full"
     >
       {/* Main Content Card */}
-      <div className="unified-table-frame bg-card text-card-foreground soft-card force-light flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-none shadow-sm border border-border">
+      <div className="bg-card text-card-foreground soft-card force-light flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-2xl shadow-sm border border-border/60">
         <div className="absolute inset-0 striped-pattern opacity-[0.05] pointer-events-none" />
 
         {/* Integrated Header & Controls */}
@@ -3217,9 +2737,7 @@ export function AEDataConfig({
                         className="text-center border-b border-r border-[#E2E8F0] bg-card min-w-[50px]"
                       >
                         <span className="text-[0.875rem] font-medium text-foreground/40">
-                          {itemsPerPage === Infinity
-                            ? idx + 1
-                            : (currentPage - 1) * itemsPerPage + idx + 1}
+                          {(currentPage - 1) * itemsPerPage + idx + 1}
                         </span>
                       </td>
                       <td
@@ -3305,14 +2823,10 @@ export function AEDataConfig({
                             name={`file-${row.id}`}
                             className="hidden"
                             accept=".xlsx,.xls"
-                            onChange={(e) => {
-                              const selectedFile = e.currentTarget.files?.[0];
-                              if (selectedFile) {
-                                void handleFileUpload(row.id, selectedFile);
-                              }
-                              // Allow choosing the same file again after an error.
-                              e.currentTarget.value = "";
-                            }}
+                            onChange={(e) =>
+                              e.target.files?.[0] &&
+                              handleFileUpload(row.id, e.target.files[0])
+                            }
                           />
                           <button
                             onClick={() =>
@@ -3385,12 +2899,9 @@ export function AEDataConfig({
                               <span className="whitespace-nowrap">Sẵn sàng</span>
                             </div>
                           ) : row.status.includes("Error") ? (
-                            <div
-                              className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-rose-200"
-                              title={row.status.replace(/^Error:\s*/i, "")}
-                            >
+                            <div className="flex items-center gap-1.5 text-rose-600 bg-rose-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-rose-200">
                               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                              <span className="whitespace-nowrap">Lỗi định dạng</span>
+                              <span className="whitespace-nowrap">Lỗi</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-[0.6875rem] font-bold uppercase tracking-wider border border-amber-200">
@@ -3429,37 +2940,15 @@ export function AEDataConfig({
                 className={`w-4 h-4 ${isProcessing ? "animate-spin" : ""}`}
               />
             </button>
-            <div className="flex items-center gap-1.5">
-              <span className="text-[0.625rem] font-bold uppercase tracking-widest text-foreground/40 whitespace-nowrap">
-                Hiển thị:
-              </span>
-              <Select
-                value={
-                  itemsPerPage === Infinity ? "all" : String(itemsPerPage)
-                }
-                onValueChange={(value) => {
-                  setItemsPerPage(
-                    value === "all" ? Infinity : Number(value),
-                  );
-                  setCurrentPage(1);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[104px] rounded-full border-primary/10 bg-card px-3 text-[0.6875rem] font-bold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="z-[99999] bg-popover">
-                  <SelectItem value="10">10 dòng</SelectItem>
-                  <SelectItem value="20">20 dòng</SelectItem>
-                  <SelectItem value="50">50 dòng</SelectItem>
-                  <SelectItem value="100">100 dòng</SelectItem>
-                  <SelectItem value="all">Tất cả</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <p className="text-[0.625rem] font-bold uppercase tracking-widest text-foreground/40">
-              <span className="text-foreground">{displayedRangeStart}</span>{" "}
+              Hiển thị{" "}
+              <span className="text-foreground">
+                {(currentPage - 1) * itemsPerPage + 1}
+              </span>{" "}
               -{" "}
-              <span className="text-foreground">{displayedRangeEnd}</span>{" "}
+              <span className="text-foreground">
+                {Math.min(currentPage * itemsPerPage, filteredData.length)}
+              </span>{" "}
               / <span className="text-foreground">{filteredData.length}</span>{" "}
               file
             </p>
@@ -3598,12 +3087,7 @@ export function AEDataConfig({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={showDialog}
-        onOpenChange={(open) => {
-          if (!isProcessing) setShowDialog(open);
-        }}
-      >
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-2xl border border-primary/10 shadow-2xl bg-card text-card-foreground rounded-2xl p-6 max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="font-bold uppercase tracking-widest text-primary text-sm">
@@ -3676,24 +3160,15 @@ export function AEDataConfig({
             <Button
               variant="outline"
               onClick={() => setShowDialog(false)}
-              disabled={isProcessing}
               className="border-primary/10 bg-card text-card-foreground font-bold uppercase text-[0.625rem] tracking-widest px-6 py-2.5 rounded-xl hover:bg-primary/5 transition-all"
             >
               Hủy bỏ
             </Button>
             <Button
               onClick={() => confirmUploads(choices)}
-              disabled={isProcessing}
               className="bg-primary text-primary-foreground font-bold uppercase text-[0.625rem] tracking-widest px-6 py-2.5 rounded-xl hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
             >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Đang tự động map...
-                </>
-              ) : (
-                "Xác nhận tải lên"
-              )}
+              Xác nhận tải lên
             </Button>
           </DialogFooter>
         </DialogContent>
