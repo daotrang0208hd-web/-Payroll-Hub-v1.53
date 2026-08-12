@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playwrite+AR:wght@400&family=Playwrite+ZA:wght@400&family=Playwrite+IS:wght@400&family=Nunito:wght@300;400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Space+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300..900&family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@300..800&family=Inter:wght@300..900&family=Yellowtail&family=Fredoka:wght@600;700;900&family=Lilita+One&family=Waterfall&family=Playpen+Sans:wght@300..800&family=Corinthia:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playwrite+AR:wght@400&family=Playwrite+ZA:wght@400&family=Playwrite+IS:wght@400&family=Nunito:wght@300;400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&family=Space+Mono:wght@400;700&family=Quicksand:wght@300..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300..900&family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@300..800&family=Inter:wght@300..900&family=Yellowtail&family=Fredoka:wght@600;700;900&family=Lilita+One&family=Waterfall&family=Playpen+Sans:wght@300..800&family=Corinthia:wght@400;700&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -43,6 +43,14 @@
   --font-main: "Inter", sans-serif;
   --font-display: "Space Grotesk", sans-serif;
   --font-mono: "Space Grotesk", sans-serif;
+  --font-space-grotesk: "Space Grotesk", sans-serif;
+  --font-jetbrains-mono: "JetBrains Mono", monospace;
+  --font-inter: "Inter", sans-serif;
+  --font-newsreader: "Newsreader", serif;
+  --font-nunito: "Nunito", sans-serif;
+  --font-quicksand: "Quicksand", "Nunito", sans-serif;
+  --font-table: var(--font-mono);
+  --font-size: 13px;
   --custom-font-size: 13px;
   --font-weight-bold: 600;
   --tracking-tight: 0.02em;
@@ -65,6 +73,8 @@
   --muted-foreground: #6B4A4F;
   --border: #E7DBDC;
   --table-grid-color: #e7dbdc;
+  --table-header-bg: #FAF3E8;
+  --table-footer-bg: #F8F4EC;
   --ring: #5D111A;
   --sky: #0EA5E9; 
   --rose: #F43F5E; 
@@ -401,7 +411,7 @@
     position: sticky !important;
     bottom: 0 !important;
     z-index: 45 !important;
-    background-color: var(--table-header-bg, var(--secondary, #FAF9F6)) !important;
+    background-color: var(--table-footer-bg, var(--table-header-bg, #F8F4EC)) !important;
     color: var(--accent, #1e293b) !important;
     font-weight: 800 !important;
     font-size: 0.85rem !important;
@@ -615,7 +625,7 @@
   .pivot-table-container .total-row,
   .master-ae-table-wrapper tfoot tr td,
   .data-table-wrapper tfoot tr td {
-    background-color: var(--table-header-bg, var(--secondary, #FAF9F6)) !important;
+    background-color: var(--table-footer-bg, var(--table-header-bg, #F8F4EC)) !important;
     color: var(--accent, #1e293b) !important;
     font-weight: 800 !important;
     font-size: 10px !important;

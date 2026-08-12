@@ -23,14 +23,15 @@ import { AppData } from "../../types";
 import {
   getL07FromFileName,
   getCenterInfoByL07,
-  getCenterInfoByAECode,
-  mapL07,
   getBusinessFromL07,
 } from "../../lib/utils/center-utils";
+import {
+  isFileNameStoredAsL07,
+  resolveTimesheetCenterFromFileName,
+} from "../../lib/utils/timesheet-input-resolver";
 import { 
   generateUUID, 
   prepareDataForExport,
-  getVal,
   getExcelFileBuffer,
   fetchGoogleSheetAsFile,
 } from "../../lib/utils/data-utils";
@@ -186,55 +187,32 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         toast.info(`Tìm thấy ${driveFiles.length} file hợp lệ. Đang tự động đối chiếu và nạp dữ liệu...`);
 
         const currentInputs = [...(appData.Timesheet_InputList || [])];
-        const toProcess: { id: string; file: File }[] = [];
-        let successCount = 0;
+        const configuredInputs = currentInputs.filter(
+          (row) => !isFileNameStoredAsL07(row),
+        );
+        const queuedByRowId = new Map<
+          string,
+          {
+            id: string;
+            file: File;
+            url: string;
+            uploadDate: string;
+            modifiedAt: number;
+          }
+        >();
         let skipCount = 0;
 
         for (const f of driveFiles) {
           const fileName = String(f.name || "");
-          const l07 = getL07FromFileName(fileName) || "";
-          if (!l07) {
+          const configuredCenter = resolveTimesheetCenterFromFileName(
+            fileName,
+            configuredInputs,
+          );
+          if (!configuredCenter) {
             skipCount++;
             continue;
           }
-          const centerInfo = getCenterInfoByL07(l07);
-          const aeCode = centerInfo?.aeCode || "";
-          const bu = getBusinessFromL07(l07);
-
-          // Matching logic similar to bulk Excel upload
-          let matchIndex = currentInputs.findIndex((r) => {
-            const rowL07 = r.l07 ? mapL07(r.l07).toLowerCase() : "";
-            const rowAE = r.aeCode ? r.aeCode.toLowerCase() : "";
-            const matchL07 = l07 && rowL07 === l07.toLowerCase();
-            const matchAE = aeCode && rowAE === aeCode.toLowerCase();
-            return matchL07 || matchAE;
-          });
-
-          if (matchIndex === -1) {
-            matchIndex = currentInputs.findIndex(r => !r.l07 && !r.fileName && (r.status === "pending" || r.status === "ready"));
-          }
-
-          let rowId: string;
-          if (matchIndex !== -1) {
-            rowId = currentInputs[matchIndex].id;
-            currentInputs[matchIndex] = {
-              ...currentInputs[matchIndex],
-              l07: l07,
-              aeCode: aeCode,
-              bus: bu,
-              status: "processing",
-            };
-          } else {
-            rowId = crypto.randomUUID();
-            currentInputs.push({
-              id: rowId,
-              l07: l07,
-              aeCode: aeCode,
-              bus: bu,
-              status: "processing",
-              url: ""
-            });
-          }
+          const rowId = configuredCenter.id;
 
           const sheetUrl = `https://docs.google.com/spreadsheets/d/${f.id}`;
           const fileContent = JSON.stringify({ url: sheetUrl });
@@ -244,16 +222,45 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             name = name.replace(/\.(xlsx|xls|csv)$/i, "") + ".gsheet";
           }
           const fileObj = new File([blob], name, { type: 'application/json' });
-          toProcess.push({ id: rowId, file: fileObj });
-          successCount++;
+          const modifiedAt = Date.parse(String(f.modifiedTime || f.createdTime || "")) || 0;
+          const modifiedDate = modifiedAt ? new Date(modifiedAt) : new Date();
+          const uploadDate = modifiedDate.toLocaleString("vi-VN", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const queued = queuedByRowId.get(rowId);
+          if (!queued || modifiedAt >= queued.modifiedAt) {
+            if (queued) skipCount++;
+            queuedByRowId.set(rowId, {
+              id: rowId,
+              file: fileObj,
+              url: `${sheetUrl}/edit`,
+              uploadDate,
+              modifiedAt,
+            });
+          } else {
+            skipCount++;
+          }
         }
+
+        const toProcess = Array.from(queuedByRowId.values());
+        const successCount = toProcess.length;
 
         if (successCount > 0) {
           // Set matched rows to a "ready" status first, but don't start processing yet
           const readyInputs = currentInputs.map(r => {
-            const match = toProcess.find(tp => tp.id === r.id);
-            if (match && r.status !== "success") {
-              return { ...r, status: "ready" as const };
+            const match = queuedByRowId.get(r.id);
+            if (match) {
+              return {
+                ...r,
+                status: "ready" as const,
+                url: match.url,
+                fileName: match.file.name,
+                date: match.uploadDate,
+              };
             }
             return r;
           });
@@ -269,7 +276,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             
             // 2. Process the file (this includes the fetch)
             try {
-              await handleUploadFile(item.id, item.file);
+              await handleUploadFile(item.id, item.file, {
+                url: item.url,
+                uploadDate: item.uploadDate,
+              });
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
               console.error(`Failed to process ${item.file.name}:`, err);
@@ -277,9 +287,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               toast.error(`Lỗi xử lý ${item.file.name}: ${msg}`);
             }
             
-            // 3. Wait 1500ms before next file to avoid rate limits (except for the last one)
+            // Yield briefly between files so rendering stays responsive. The
+            // fetch layer already applies retry/backoff for Google rate limits.
             if (i < toProcess.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 1500));
+              await new Promise(resolve => setTimeout(resolve, 150));
             }
           }
           
@@ -344,6 +355,71 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
   const inputRows = useMemo(() => appData.Timesheet_InputList || [
     { id: "1", l07: "", aeCode: "", bus: "", url: "", status: "pending" },
   ], [appData.Timesheet_InputList]);
+
+  // Repair rows created by the previous folder-import bug. Their L07 was the
+  // filename itself; move the imported file/data back onto the already
+  // configured center row and remove only that generated duplicate.
+  useEffect(() => {
+    updateAppData((prev) => {
+      const rows = prev.Timesheet_InputList || [];
+      const malformedRows = rows.filter(isFileNameStoredAsL07);
+      if (malformedRows.length === 0) return prev;
+
+      const validRows = rows.filter((row) => !isFileNameStoredAsL07(row));
+      const replacementByTargetId = new Map<string, (typeof rows)[number]>();
+      const targetIdBySourceId = new Map<string, string>();
+      const preferredSourceIdByTargetId = new Map<string, string>();
+      const removableIds = new Set<string>();
+
+      malformedRows.forEach((row) => {
+        if (!row.fileName) return;
+        const target = resolveTimesheetCenterFromFileName(row.fileName, validRows);
+        if (!target) return;
+        replacementByTargetId.set(target.id, {
+          ...target,
+          url: row.url || target.url,
+          fileName: row.fileName,
+          sheetName: row.sheetName || target.sheetName,
+          status: row.status,
+          count: row.count,
+          date: row.date,
+          columnMapping: row.columnMapping || target.columnMapping,
+        });
+        targetIdBySourceId.set(row.id, target.id);
+        preferredSourceIdByTargetId.set(target.id, row.id);
+        removableIds.add(row.id);
+      });
+
+      if (removableIds.size === 0) return prev;
+      const nextInputs = rows
+        .filter((row) => !removableIds.has(row.id))
+        .map((row) => replacementByTargetId.get(row.id) || row);
+      const repairDataRows = (data: Record<string, unknown>[] = []) => {
+        const targetIds = new Set(preferredSourceIdByTargetId.keys());
+        const preferredSourceIds = new Set(preferredSourceIdByTargetId.values());
+        return data
+          .filter((row) => {
+            const rowId = String(row._rowId || "");
+            if (targetIds.has(rowId)) return false;
+            return !targetIdBySourceId.has(rowId) || preferredSourceIds.has(rowId);
+          })
+          .map((row) => {
+            const sourceId = String(row._rowId || "");
+            const targetId = targetIdBySourceId.get(sourceId);
+            return targetId ? { ...row, _rowId: targetId } : row;
+          });
+      };
+
+      return {
+        ...prev,
+        Timesheet_InputList: nextInputs,
+        Timesheet_Roster: repairDataRows(prev.Timesheet_Roster),
+        Q_Salary_Scale: repairDataRows(prev.Q_Salary_Scale),
+        Q_Staff: repairDataRows(prev.Q_Staff),
+        Q_Cache: repairDataRows(prev.Q_Cache),
+      };
+    }, false);
+  }, [updateAppData]);
 
   const handleAddRow = () => {
     updateAppData((prev) => ({
@@ -441,79 +517,6 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     }));
     toast?.success("Đã xóa các dòng chưa có mã L07.");
   };
-
-  useEffect(() => {
-    if (rosterData.length === 0) return;
-
-    const centerSet = new Map<
-      string,
-      { l07: string; aeCode: string; bus: string }
-    >();
-    rosterData.forEach((t) => {
-      const rawCenterCol = String(
-        getVal(t, ["center", "location", "cơ sở"]) || "",
-      ).trim();
-      const rawAECol = String(getVal(t, ["mã ae", "ae"]) || "").trim();
-      const info =
-        getCenterInfoByAECode(rawAECol) ||
-        getCenterInfoByL07(rawCenterCol) ||
-        getCenterInfoByL07(mapL07(rawCenterCol));
-
-      const l07 = info?.l07 || rawCenterCol || rawAECol || "UNKNOWN";
-      const aeCode = info?.aeCode || rawAECol || "";
-      const bus = info?.bus || "";
-      const key = `${l07}|${aeCode}|${bus}`;
-
-      if (!centerSet.has(key)) {
-        centerSet.set(key, { l07, aeCode, bus });
-      }
-    });
-
-    updateAppData((prev) => {
-      const currentInputs = prev.Timesheet_InputList || [];
-      const existingKeys = new Set(
-        currentInputs.map((r) => `${r.l07}|${r.aeCode}|${r.bus}`),
-      );
-      
-      let hasChanges = false;
-      let newInputs = [...currentInputs];
-
-      if (
-        centerSet.size > 0 &&
-        newInputs.length === 1 &&
-        !newInputs[0].l07 &&
-        !newInputs[0].url
-      ) {
-        newInputs = [];
-        hasChanges = true;
-      }
-
-      centerSet.forEach((val, key) => {
-        if (!existingKeys.has(key)) {
-          const defaultUrl = val.l07 === "MKT LOCAL NORTH"
-            ? "https://docs.google.com/spreadsheets/d/1z7DJYJAyWqBw8IXNYbEIHhGXBMumsRA4rUHT1prBsFo/edit?gid=1119129159#gid=1119129159"
-            : "";
-          newInputs.push({
-            id: generateUUID(),
-            l07: val.l07,
-            aeCode: val.aeCode,
-            bus: val.bus,
-            url: defaultUrl,
-            status: "pending",
-          });
-          hasChanges = true;
-        }
-      });
-
-      if (hasChanges) {
-        return {
-          ...prev,
-          Timesheet_InputList: newInputs,
-        };
-      }
-      return prev;
-    }, false);
-  }, [rosterData, updateAppData]);
 
   const handleRecalculate = () => {
     setRefreshKey((prev) => prev + 1);
@@ -757,6 +760,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     const currentInputs = appData.Timesheet_InputList || [];
     const updatedInputs = [...currentInputs];
     const toProcess: { id: string; file: File }[] = [];
+    let unmatchedCount = 0;
 
     const filteredFiles = files.filter(f => !f.name.toLowerCase().includes("copy"));
     if (filteredFiles.length === 0 && files.length > 0) {
@@ -765,17 +769,17 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     }
 
     for (const file of filteredFiles) {
-      const l07 = getL07FromFileName(file.name) || "";
-      const centerInfo = l07 ? getCenterInfoByL07(l07) : null;
-      const aeCode = centerInfo?.aeCode || "";
-
-      const matchIndex = updatedInputs.findIndex((r) => {
-        const matchL07 =
-          l07 && r.l07 && r.l07.toLowerCase() === l07.toLowerCase();
-        const matchAE =
-          aeCode && r.aeCode && r.aeCode.toLowerCase() === aeCode.toLowerCase();
-        return matchL07 || matchAE;
-      });
+      const configuredCenter = resolveTimesheetCenterFromFileName(
+        file.name,
+        updatedInputs.filter((row) => !isFileNameStoredAsL07(row)),
+      );
+      if (!configuredCenter) {
+        unmatchedCount++;
+        continue;
+      }
+      const matchIndex = updatedInputs.findIndex(
+        (row) => row.id === configuredCenter.id,
+      );
 
       if (matchIndex !== -1) {
         updatedInputs[matchIndex] = {
@@ -783,27 +787,20 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           status: "processing",
         };
         toProcess.push({ id: updatedInputs[matchIndex].id, file });
-      } else {
-        const defaultUrl = l07 === "MKT LOCAL NORTH"
-          ? "https://docs.google.com/spreadsheets/d/1z7DJYJAyWqBw8IXNYbEIHhGXBMumsRA4rUHT1prBsFo/edit?gid=1119129159#gid=1119129159"
-          : "";
-        const newId = crypto.randomUUID();
-        updatedInputs.push({
-          id: newId,
-          l07: l07,
-          aeCode: aeCode,
-          bus: centerInfo?.bus || "",
-          status: "processing",
-          url: defaultUrl
-        });
-        toProcess.push({ id: newId, file });
       }
     }
 
     const latestFileByRow = new Map<string, { id: string; file: File }>();
     toProcess.forEach((item) => latestFileByRow.set(item.id, item));
     const queue = Array.from(latestFileByRow.values());
-    if (queue.length === 0) return;
+    if (queue.length === 0) {
+      if (unmatchedCount > 0) {
+        toast.warning(
+          `${unmatchedCount} file không khớp danh sách L07 đã cấu hình nên không được thêm vào bảng.`,
+        );
+      }
+      return;
+    }
 
     type BatchResult = {
       id: string;
@@ -920,9 +917,18 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       const firstError = results.find((result) => result.error)?.error?.message;
       toast.error(`${errorCount} file bị lỗi${firstError ? `: ${firstError}` : "."}`);
     }
+    if (unmatchedCount > 0) {
+      toast.warning(
+        `Đã bỏ qua ${unmatchedCount} file không khớp danh sách L07; không tạo thêm dòng mới.`,
+      );
+    }
   };
 
-  const handleUploadFile = async (rowId: string, file: File) => {
+  const handleUploadFile = async (
+    rowId: string,
+    file: File,
+    sourceMetadata?: { url?: string; uploadDate?: string },
+  ) => {
     if (file.name.toLowerCase().includes("copy")) {
       toast?.info(`Hệ thống tự động bỏ qua file có tên 'copy': ${file.name}`);
       return;
@@ -970,7 +976,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           else next.Timesheet_Roster = next.Timesheet_Roster.concat(allRows);
 
           const d = new Date();
-          const bu = detectedL07 ? getBusinessFromL07(detectedL07) : "";
+          const bu =
+            targetRow?.bus ||
+            centerInfo?.bus ||
+            (detectedL07 ? getBusinessFromL07(detectedL07) : "");
 
           next.Timesheet_InputList = (next.Timesheet_InputList || []).map((input) =>
             input.id === rowId
@@ -981,7 +990,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
                   bus: input.bus || bu || "",
                   status: "success",
                   fileName: file.name,
-                  date: `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getDate()}/${d.getMonth() + 1}`,
+                  url: sourceMetadata?.url || input.url,
+                  date:
+                    sourceMetadata?.uploadDate ||
+                    `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")} ${d.getDate()}/${d.getMonth() + 1}`,
                 }
               : input
           );

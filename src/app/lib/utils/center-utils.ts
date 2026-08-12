@@ -72,6 +72,95 @@ function normalizeCenterKey(str: string): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
+function tokenizeFileName(fileName: string): string[] {
+  return String(fileName || "")
+    .replace(/\.(xlsx?|xls|csv|gsheet|txt)$/i, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[Đđ]/g, "D")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
+ * Resolve a center from a Timesheet filename without ever treating an
+ * unknown filename as an L07. Besides full center names/codes, this supports
+ * the compact folder convention used by TA Roster files, for example
+ * `HN-NVL-TA Roster` and `HN-TH-TA Roster`.
+ */
+export function getCenterInfoFromFileName(fileName: string): CenterInfo | null {
+  if (!fileName) return null;
+
+  const tokens = tokenizeFileName(fileName);
+  if (tokens.length === 0) return null;
+  const tokenSet = new Set(tokens);
+  const compactName = tokens.join("");
+  let bestMatch: { info: CenterInfo; score: number } | null = null;
+  let hasTie = false;
+
+  for (const info of CENTER_DATA) {
+    let score = 0;
+    const compactL07 = normalizeCenterKey(info.l07);
+    if (compactL07 && compactName.includes(compactL07)) {
+      score = 2000 + compactL07.length;
+    }
+
+    const codeMatch = info.l07.toUpperCase().match(/^([A-Z]+)0*(\d+)(?:\.([A-Z0-9]+))?$/);
+    const regionTokens = new Set<string>();
+    if (codeMatch) {
+      const [, region, sequence, suffix] = codeMatch;
+      const sequenceNumber = String(Number(sequence));
+      regionTokens.add(region);
+      regionTokens.add(`${region}${sequenceNumber}`);
+      regionTokens.add(`${region}${sequenceNumber.padStart(2, "0")}`);
+      regionTokens.add(`${region}${sequence}`);
+
+      const hasRegion = Array.from(regionTokens).some((token) => tokenSet.has(token));
+      if (suffix && tokenSet.has(suffix) && hasRegion) {
+        score = Math.max(score, 1500 + suffix.length);
+      }
+    }
+
+    const hasRegion = Array.from(regionTokens).some((token) => tokenSet.has(token));
+    const aliases = [info.aeCode, ...info.keys];
+    aliases.forEach((alias) => {
+      const normalizedAlias = normalizeCenterKey(alias);
+      if (!normalizedAlias) return;
+
+      if (normalizedAlias.length >= 4 && compactName.includes(normalizedAlias)) {
+        score = Math.max(score, 900 + normalizedAlias.length);
+        return;
+      }
+
+      // Short aliases such as TH, PH or VP are only safe when the filename
+      // also carries the center region (HN-TH, HN-PH, HN-VP, ...).
+      if (
+        normalizedAlias.length >= 2 &&
+        normalizedAlias.length <= 3 &&
+        tokenSet.has(normalizedAlias) &&
+        (hasRegion ||
+          compactName === normalizedAlias ||
+          (info.l07 === "AA" && normalizedAlias === "AA"))
+      ) {
+        score = Math.max(score, 700 + normalizedAlias.length);
+      }
+    });
+
+    if (score <= 0) continue;
+    if (!bestMatch || score > bestMatch.score) {
+      bestMatch = { info, score };
+      hasTie = false;
+    } else if (score === bestMatch.score && bestMatch.info.l07 !== info.l07) {
+      hasTie = true;
+    }
+  }
+
+  return bestMatch && !hasTie ? bestMatch.info : null;
+}
+
 const LOOKUP_MAP = new Map<string, CenterInfo>();
 
 CENTER_DATA.forEach((info) => {
@@ -227,7 +316,7 @@ export function getL07FromFileName(fileName: string): string {
   if (!fileName) return "";
   const name = fileName.toUpperCase();
   if (name.includes("MKT")) return "MKT LOCAL NORTH";
-  return mapL07(fileName);
+  return getCenterInfoFromFileName(fileName)?.l07 || "";
 }
 
 export function getL07FromChargeToCenterMkt(chargeToCenter: string): string {

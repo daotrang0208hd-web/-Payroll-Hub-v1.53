@@ -2813,29 +2813,29 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                 >
                   {/* Grand Total Row */}
                   <tr
-                    className={`${footerClassName || headerClassName || "bg-[var(--table-header-bg,var(--secondary))]"} ${(footerClassName || headerClassName || "").includes("text-") ? "" : "text-slate-800"} ${(footerClassName || headerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold border-t border-slate-300 total-row`}
+                    className={`${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"} ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold border-t border-slate-300 total-row`}
                   >
                     {selectable && (
                       <td
-                        className={`border-b border-t border-slate-300 ${footerClassName || headerClassName || ""}`}
+                        className={`border-b border-t border-slate-300 ${footerClassName || ""}`}
                         style={{
                           position: "sticky",
                           bottom: 0,
                           zIndex: 30,
                           borderRight: "none",
-                          backgroundColor: (footerClassName || headerClassName) ? undefined : "var(--table-header-bg, var(--secondary))",
+                          backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                         }}
                       />
                     )}
                     {showRowNumber && (
                       <td
-                        className={`border-b border-t border-slate-300 ${footerClassName || headerClassName || ""}`}
+                        className={`border-b border-t border-slate-300 ${footerClassName || ""}`}
                         style={{
                           position: "sticky",
                           bottom: 0,
                           zIndex: 30,
                           borderRight: "none",
-                          backgroundColor: (footerClassName || headerClassName) ? undefined : "var(--table-header-bg, var(--secondary))",
+                          backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                         }}
                       />
                     )}
@@ -2852,7 +2852,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                       return (
                         <td
                           key={`footer-grand-${col.key}`}
-                          className={`whitespace-nowrap font-bold border-b border-t border-slate-300 border-r border-[#E2E8F0] ${getAlignment(col)} uppercase text-[0.75rem] ${footerClassName || headerClassName || "bg-[var(--table-header-bg,var(--secondary))]"} ${(footerClassName || headerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""}`}
+                          className={`whitespace-nowrap font-bold border-b border-t border-slate-300 border-r border-[#E2E8F0] ${getAlignment(col)} uppercase text-[0.75rem] ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"} ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""}`}
                           style={{
                             padding: "var(--table-padding, 0.4rem 0.6rem)",
                             paddingTop: "5px",
@@ -2866,7 +2866,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                             position: "sticky",
                             bottom: 0,
                             zIndex: 30,
-                            backgroundColor: (footerClassName || headerClassName) ? undefined : "var(--table-header-bg, var(--secondary))",
+                            backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                             borderRight: (cIdx === 0 || grandTotal !== null) ? undefined : "none",
                           }}
                         >

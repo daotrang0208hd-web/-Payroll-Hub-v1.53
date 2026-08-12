@@ -265,7 +265,6 @@ export function TimesheetInputTable({
       id="roster-center-table-wrapper" 
       className="flex-1 flex flex-col min-h-0 relative font-[family-name:var(--font-table,var(--font-main))]"
       style={{
-        "--font-size": "13px",
         paddingTop: "0px",
         paddingBottom: "0px",
         paddingLeft: "0px",

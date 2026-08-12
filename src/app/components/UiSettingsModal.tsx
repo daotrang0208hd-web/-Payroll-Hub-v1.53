@@ -693,12 +693,38 @@ export function UiSettingsModal({
                       }
                       className="w-full border-2 border-primary rounded-lg p-2 font-bold text-sm outline-none focus:shadow-hard-sm transition-all bg-white text-primary"
                     >
-                      <option value="var(--font-mono)">JetBrains Mono (Sắc sảo / Kỹ thuật)</option>
+                      <option value="var(--font-mono)">Mặc định hệ thống (Space Grotesk)</option>
+                      <option value="var(--font-space-grotesk)">Space Grotesk (Hiện đại / Rõ nét)</option>
+                      <option value="var(--font-jetbrains-mono)">JetBrains Mono (Sắc sảo / Kỹ thuật)</option>
                       <option value="var(--font-inter)">Inter (Hiện đại / Tối giản)</option>
                       <option value="var(--font-newsreader)">Newsreader (Cổ điển / Báo chí)</option>
                       <option value="var(--font-nunito)">Nunito (Mềm mại)</option>
                       <option value="var(--font-quicksand)">Quicksand (Tròn trịa)</option>
                     </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1 mt-2">
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="table-font-size" className="font-bold text-[0.8125rem]">
+                        Cỡ chữ của bảng
+                      </label>
+                      <span className="text-xs font-bold">{settings.fontSize || "13px"}</span>
+                    </div>
+                    <input
+                      id="table-font-size"
+                      type="range"
+                      min="9"
+                      max="20"
+                      step="1"
+                      value={parseFloat(settings.fontSize || "13") || 13}
+                      onChange={(e) =>
+                        setSettings({ ...settings, fontSize: `${e.target.value}px` })
+                      }
+                      className="w-full accent-primary"
+                    />
+                    <p className="text-[10px] font-medium text-gray-500">
+                      Áp dụng đồng nhất cho tiêu đề, nội dung, dòng tổng và chân phân trang.
+                    </p>
                   </div>
 
                   {/* Table Border Radius Slider */}
@@ -1030,6 +1056,7 @@ export function UiSettingsModal({
                               stripeColor2: presetData.stripeColor2,
                               gridLineColor: presetData.gridLineColor,
                               tableHeaderBg: presetData.tableHeaderBg,
+                              tableFooterBg: presetData.tableFooterBg,
                               tableFont: presetData.tableFont,
                               tableRadius: presetData.tableRadius,
                             }));
@@ -1313,6 +1340,28 @@ export function UiSettingsModal({
                         }
                         onChange={(e) =>
                           setSettings({ ...settings, tableHeaderBg: e.target.value })
+                        }
+                        className="w-10 h-10 cursor-pointer border-2 border-primary rounded-lg p-0.5 shadow-hard-sm"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label
+                        htmlFor="table-footer-bg"
+                        className="font-bold text-[0.8125rem]"
+                      >
+                        Nền Chân Bảng (Footer Bg)
+                      </label>
+                      <input
+                        id="table-footer-bg"
+                        type="color"
+                        value={
+                          settings.tableFooterBg?.startsWith("#") &&
+                          settings.tableFooterBg.length === 7
+                            ? settings.tableFooterBg
+                            : "#f8f4ec"
+                        }
+                        onChange={(e) =>
+                          setSettings({ ...settings, tableFooterBg: e.target.value })
                         }
                         className="w-10 h-10 cursor-pointer border-2 border-primary rounded-lg p-0.5 shadow-hard-sm"
                       />

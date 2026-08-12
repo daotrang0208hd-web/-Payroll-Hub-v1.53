@@ -1,4 +1,8 @@
-import { getL07FromFileName, mapL07 } from "./center-utils";
+import {
+  getCenterInfoByL07,
+  getL07FromFileName,
+  mapL07,
+} from "./center-utils";
 
 export interface TimesheetCenterConfig {
   id: string;
@@ -25,7 +29,14 @@ export function resolveTimesheetCenterFromFileName<T extends TimesheetCenterConf
   fileName: string,
   configuredRows: T[],
 ): T | undefined {
-  const normalizedFileName = compact(fileName.replace(/\.(xlsx?|csv|gsheet)$/i, ""));
+  const fileBase = fileName.replace(/\.(xlsx?|xls|csv|gsheet|txt)$/i, "");
+  const normalizedFileName = compact(fileBase);
+  const fileTokens = new Set(
+    fileBase
+      .split(/[^a-zA-Z0-9À-ỹĐđ]+/)
+      .map(compact)
+      .filter(Boolean),
+  );
   let bestMatch: { row: T; score: number } | undefined;
 
   configuredRows.forEach((row) => {
@@ -39,6 +50,9 @@ export function resolveTimesheetCenterFromFileName<T extends TimesheetCenterConf
     if (aeCode.length >= 4 && normalizedFileName.includes(aeCode)) {
       score = Math.max(score, 100 + aeCode.length);
     }
+    if (aeCode.length >= 3 && fileTokens.has(aeCode)) {
+      score = Math.max(score, 180 + aeCode.length);
+    }
 
     if (score > (bestMatch?.score || 0)) bestMatch = { row, score };
   });
@@ -50,5 +64,20 @@ export function resolveTimesheetCenterFromFileName<T extends TimesheetCenterConf
   const normalizedDetectedL07 = compact(mapL07(detectedL07));
   return configuredRows.find(
     (row) => compact(mapL07(row.l07 || "")) === normalizedDetectedL07,
+  );
+}
+
+/** Detect rows created by the old bug where L07 was copied from fileName. */
+export function isFileNameStoredAsL07(
+  row: Pick<TimesheetCenterConfig, "l07"> & { fileName?: string },
+): boolean {
+  if (!row.l07 || !row.fileName) return false;
+  const l07 = compact(row.l07);
+  const fileBase = compact(row.fileName.replace(/\.(xlsx?|xls|csv|gsheet|txt)$/i, ""));
+  return Boolean(
+    l07 &&
+      fileBase &&
+      l07 === fileBase &&
+      !getCenterInfoByL07(row.l07),
   );
 }

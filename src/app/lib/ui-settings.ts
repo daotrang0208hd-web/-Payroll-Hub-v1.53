@@ -61,6 +61,7 @@ export interface UiSettings {
   colWidthPreference?: "narrow" | "normal" | "wide";
   defaultAuditYear?: number;
   tableHeaderBg?: string;
+  tableFooterBg?: string;
   preset?: string;
 }
 
@@ -75,6 +76,7 @@ export interface TastePreset {
   stripeColor2: string;
   gridLineColor: string;
   tableHeaderBg: string;
+  tableFooterBg: string;
   tableFont: string;
   tableRadius: string;
 }
@@ -91,6 +93,7 @@ export const TASTE_PRESETS: Record<string, TastePreset> = {
     stripeColor2: "#F4ECD8",
     gridLineColor: "#E2E8F0",
     tableHeaderBg: "#FAF3E8",
+    tableFooterBg: "#F8F4EC",
     tableFont: "var(--font-mono)",
     tableRadius: "12px",
   },
@@ -105,6 +108,7 @@ export const TASTE_PRESETS: Record<string, TastePreset> = {
     stripeColor2: "#FAFAFA",
     gridLineColor: "rgba(24, 24, 27, 0.05)",
     tableHeaderBg: "#F4F4F5",
+    tableFooterBg: "#FAFAFA",
     tableFont: "var(--font-inter)",
     tableRadius: "6px",
   },
@@ -119,6 +123,7 @@ export const TASTE_PRESETS: Record<string, TastePreset> = {
     stripeColor2: "#FDFBF7",
     gridLineColor: "rgba(63, 42, 38, 0.06)",
     tableHeaderBg: "#FAF0DD",
+    tableFooterBg: "#F8EAD3",
     tableFont: "var(--font-nunito)",
     tableRadius: "16px",
   },
@@ -133,6 +138,7 @@ export const TASTE_PRESETS: Record<string, TastePreset> = {
     stripeColor2: "#F4ECD8",
     gridLineColor: "#000000",
     tableHeaderBg: "#C88493",
+    tableFooterBg: "#F4ECD8",
     tableFont: "var(--font-mono)",
     tableRadius: "0px",
   },
@@ -147,6 +153,7 @@ export const TASTE_PRESETS: Record<string, TastePreset> = {
     stripeColor2: "#09090B",
     gridLineColor: "rgba(244, 244, 245, 0.08)",
     tableHeaderBg: "#1F2937",
+    tableFooterBg: "#111827",
     tableFont: "var(--font-mono)",
     tableRadius: "8px",
   }
@@ -174,6 +181,7 @@ export const defaultSettings: UiSettings = {
   stripeColor2: "#F4ECD8",
   gridLineColor: "#E2E8F0",
   tableHeaderBg: "#FAF3E8",
+  tableFooterBg: "#F8F4EC",
   showPivotSubtotals: true,
   showGrandTotals: true,
   showMktCols: true,
@@ -456,6 +464,7 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     root.style.setProperty("--table-border-color", settings.gridLineColor);
   }
   root.style.setProperty("--table-header-bg", settings.tableHeaderBg || "#FAF3E8");
+  root.style.setProperty("--table-footer-bg", settings.tableFooterBg || "#F8F4EC");
 
   if (settings.titleAlign) {
     const [flexAlign, textAlign] = settings.titleAlign.split("|");
@@ -519,6 +528,7 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     table th :where(span, div, button, input, select, option, label, p),
     table td :where(span, div, button, input, select, option, label, p) {
       font-family: ${settings.tableFont || "var(--font-mono)"} !important;
+      font-size: ${settings.fontSize || "13px"} !important;
     }
 
     table th, 
@@ -547,7 +557,16 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     .master-ae-table-wrapper thead th,
     .master-ae-table-wrapper thead tr,
     .audit-data-table-wrapper thead th,
-    .audit-data-table-wrapper thead tr,
+    .audit-data-table-wrapper thead tr {
+      background-color: ${settings.tableHeaderBg || "#FAF3E8"} !important;
+      color: ${settings.accent || "#5D111A"} !important;
+    }
+
+    .unified-table-frame-header,
+    .table-header {
+      background-color: ${settings.tableHeaderBg || "#FAF3E8"} !important;
+    }
+
     table tfoot,
     table tfoot tr,
     table tfoot td,
@@ -559,8 +578,21 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     .total-row,
     .total-row td,
     .total-row th {
-      background-color: ${settings.tableHeaderBg || "#FAF3E8"} !important;
+      background-color: ${settings.tableFooterBg || "#F8F4EC"} !important;
       color: ${settings.accent || "#5D111A"} !important;
+    }
+
+    .table-footer-pagination,
+    .table-footer-pagination *,
+    .unified-table-frame-footer,
+    .unified-table-frame-footer * {
+      font-family: ${settings.tableFont || "var(--font-mono)"} !important;
+      font-size: ${settings.fontSize || "13px"} !important;
+    }
+
+    .table-footer-pagination,
+    .unified-table-frame-footer {
+      background-color: ${settings.tableFooterBg || "#F8F4EC"} !important;
     }
 
     button:not(.rounded-full):not(.rounded-none):not(.search-btn-exception),
@@ -607,13 +639,16 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
 
     .pivot-table-container thead,
     .pivot-table-container thead tr,
-    .pivot-table-container thead th,
+    .pivot-table-container thead th {
+      background-color: ${settings.tableHeaderBg || "#FAF3E8"} !important;
+    }
+
     .pivot-table-container tfoot,
     .pivot-table-container tfoot tr,
     .pivot-table-container tfoot td,
     .pivot-table-container .total-row,
     .pivot-table-container .total-row td {
-      background-color: ${settings.tableHeaderBg || "#FAF3E8"} !important;
+      background-color: ${settings.tableFooterBg || "#F8F4EC"} !important;
     }
 
     .pivot-table-container thead input:not(:focus) {
@@ -699,6 +734,10 @@ export async function loadUiSettings(): Promise<UiSettings> {
       result.gridLineColor = defaultSettings.gridLineColor;
     if (result.tableHeaderBg && !isValidColor(result.tableHeaderBg))
       result.tableHeaderBg = defaultSettings.tableHeaderBg;
+    if (result.tableFooterBg && !isValidColor(result.tableFooterBg))
+      result.tableFooterBg = defaultSettings.tableFooterBg;
+    if (!/^\d+(?:\.\d+)?(?:px|rem|em)$/.test(result.fontSize || ""))
+      result.fontSize = defaultSettings.fontSize;
 
     // Validate bgImage URL (must start with http, https or data:)
     if (

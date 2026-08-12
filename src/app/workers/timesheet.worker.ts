@@ -103,6 +103,9 @@ export function calculateTimesheet(params: any) {
   let empSkipped = 0;
 
   rosterData.forEach((t: any) => {
+    const configuredInput = inputListLookup.get(t._rowId) as any;
+    const configuredL07 = String(configuredInput?.l07 || "").trim();
+    const configuredAeCode = String(configuredInput?.aeCode || "").trim();
     const rawDateVal = getVal(t, [
       "date", "ngay", "ngày", "tk_date", "session date", "sessiondate",
       "ngày học", "date of class", "scheduledate", "ngày làm việc",
@@ -174,6 +177,16 @@ export function calculateTimesheet(params: any) {
     const resolvedAuth = resolveL07Logic({ rawCenter: rCen, rawChargeToCenter, sourceFile: t._sourceFile || appData?.Timesheet_RosterFileName || "", rawType, rawClassCode, rawAeCode, empId, staffLookup, normCenterCache }, TASK_COLUMNS);
     let { l07, aeCode, taskField, correctedType, correctedClass } = resolvedAuth;
     const { chargeToCenterMkt, isMktLocal } = resolvedAuth;
+
+    // A file imported into a configured Timesheet row inherits that row's
+    // center. File contents may omit Center or contain display text, but must
+    // never replace the authoritative L07 selected in the input table.
+    if (configuredL07) {
+      l07 = mapL07(configuredL07) || configuredL07;
+      const configuredCenterInfo =
+        getCenterInfoByL07(l07) || getCenterInfoByAECode(configuredAeCode);
+      aeCode = configuredAeCode || configuredCenterInfo?.aeCode || aeCode;
+    }
 
     // Use corrected values directly as they default to raw inside resolveL07Logic
     const effectiveType = correctedType;
@@ -256,7 +269,7 @@ export function calculateTimesheet(params: any) {
 
     const rawBUCol = String(getVal(t, ["khối", "business", "bus", "bộ phận", "bu", "khối/bu"]) || "").trim().toUpperCase();
     let centerBusiness = rawBUCol;
-    if (!centerBusiness) { const rowInfo = inputListLookup.get(t._rowId) as any; centerBusiness = rowInfo?.bus || ""; }
+    if (!centerBusiness) centerBusiness = configuredInput?.bus || "";
     if (!centerBusiness) {
       let centerInfoForBus = centerInfoCache.get(l07);
       if (centerInfoForBus === undefined) { centerInfoForBus = getCenterInfoByL07(l07) || getCenterInfoByAECode(l07); centerInfoCache.set(l07, centerInfoForBus); }
