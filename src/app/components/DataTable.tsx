@@ -91,6 +91,23 @@ export interface Column {
   showGrandTotal?: boolean;
 }
 
+export const OPERATION_KEY_SHORTCUTS: Record<string, string> = {
+  A: "Add",
+  H: "Hold",
+  C: "Cancel",
+  B: "Bonus",
+};
+
+const isOperationColumn = (column?: Column): boolean => {
+  if (!column) return false;
+  const normalized = `${column.key} ${column.label}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[Đđ]/g, "d")
+    .toUpperCase();
+  return normalized.includes("NGHIEP VU");
+};
+
 const isIdColumnKey = (k: string): boolean => {
   if (!k) return false;
   const lower = String(k).trim().toLowerCase();
@@ -2462,6 +2479,24 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
           return;
         if (!activeCell) return;
         const { r, c } = activeCell;
+
+        const operationValue =
+          !e.ctrlKey && !e.metaKey && !e.altKey
+            ? OPERATION_KEY_SHORTCUTS[e.key.toUpperCase()]
+            : undefined;
+        if (
+          operationValue &&
+          isOperationColumn(visibleColumns[c]) &&
+          onCellChange
+        ) {
+          const row = filteredAndSortedData[r];
+          if (row) {
+            e.preventDefault();
+            onCellChange(row, visibleColumns[c].key, operationValue);
+            showStatus(`Đã chuyển nghiệp vụ sang ${operationValue}`);
+          }
+          return;
+        }
 
         const anchorR = anchorCellRef.current ? anchorCellRef.current.r : (selectionRange ? selectionRange.startR : r);
         const anchorC = anchorCellRef.current ? anchorCellRef.current.c : (selectionRange ? selectionRange.startC : c);

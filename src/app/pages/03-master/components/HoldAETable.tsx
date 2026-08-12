@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useMemo, useCallback, forwardRef } from "react";
 import { useAppData } from "../../../lib/contexts/AppDataContext";
-import { DataTable } from "../../../components/DataTable";
+import {
+  DataTable,
+  OPERATION_KEY_SHORTCUTS,
+} from "../../../components/DataTable";
 import { Trash2, Settings, Download, RefreshCw, Plus, Search, X, ArrowLeft, Columns2 } from "lucide-react";
 import {
   DropdownMenu,
@@ -507,6 +510,17 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
                   className="flex items-center justify-center w-full py-1"
                 >
                   <button
+                    onKeyDown={(e) => {
+                      if (e.ctrlKey || e.metaKey || e.altKey || !isPeriodMatch) {
+                        return;
+                      }
+                      const nextStatus =
+                        OPERATION_KEY_SHORTCUTS[e.key.toUpperCase()];
+                      if (!nextStatus) return;
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleCellChange(row, "Nghiệp vụ", nextStatus);
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isPeriodMatch) {
@@ -529,7 +543,7 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
                               ? "bg-indigo-500 border-indigo-500 text-white"
                               : "bg-primary border-primary text-white"
                     }`}
-                    title={!isPeriodMatch ? `Chỉ sửa đổi được tại card tháng chọn` : `Bấm 1 lần để chuyển nghiệp vụ nhanh (Add ➔ Hold ➔ Cancel ➔ Bonus)`}
+                    title={!isPeriodMatch ? `Chỉ sửa đổi được tại card tháng chọn` : `Chọn ô rồi bấm A/H/C/B, hoặc bấm nút để chuyển nghiệp vụ`}
                     disabled={!isPeriodMatch}
                   >
                     <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-black/10 text-white text-[10px] font-extrabold">
