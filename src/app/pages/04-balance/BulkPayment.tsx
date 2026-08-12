@@ -377,9 +377,89 @@ export function BulkPayment({
   };
 
   const handleCopyReconciliationSummary = () => {
-    const text = generateAllSummaryText();
-    navigator.clipboard.writeText(text);
-    toast.success("Đã copy báo cáo vào clipboard");
+    const month = appData.globalMonth || globalMonth || "01.2026";
+    const rowCount = (appData.BankExport?.data || []).length;
+    const sheet1Totals = dynamicReportStats?.sheet1Totals || {};
+    const finalTotals = dynamicReportStats?.finalTotals || {};
+    const holdAddItems = dynamicReportStats?.holdAddItems || [];
+    const rows: Array<[string, string]> = [
+      ["BÁO CÁO CHI TIẾT THEO BU", month],
+      ["Số dòng dữ liệu:", `${rowCount} dòng`],
+    ];
+
+    if (activeBalanceSection === "I") {
+      rows.push(["I. GROSS PAY", ""]);
+      Object.entries(sheet1Totals)
+        .filter(([, amount]) => Number(amount) !== 0)
+        .forEach(([business, amount]) => {
+          rows.push([
+            `${business}:`,
+            formatMoneyVND(Number(amount)).replace(" ₫", ""),
+          ]);
+        });
+      const total = Object.values(sheet1Totals).reduce(
+        (sum, amount) => sum + Number(amount || 0),
+        0,
+      );
+      rows.push([
+        "TOTAL GROSS PAY:",
+        formatMoneyVND(total).replace(" ₫", ""),
+      ]);
+    } else if (activeBalanceSection === "II") {
+      rows.push(["II. DEDUCTIONS", ""]);
+      const grouped = new Map<string, number>();
+      holdAddItems.forEach((item) => {
+        const label = `${item.biz} ${item.type}:`;
+        grouped.set(label, (grouped.get(label) || 0) + Number(item.amount || 0));
+      });
+      grouped.forEach((amount, label) => {
+        rows.push([label, formatMoneyVND(amount).replace(" ₫", "")]);
+      });
+      const total = holdAddItems.reduce(
+        (sum, item) => sum + Number(item.amount || 0),
+        0,
+      );
+      rows.push([
+        "TOTAL DEDUCTIONS:",
+        formatMoneyVND(total).replace(" ₫", ""),
+      ]);
+    } else if (activeBalanceSection === "III") {
+      rows.push(["III. NET PAY", ""]);
+      Object.entries(finalTotals)
+        .filter(([, amount]) => Number(amount) !== 0)
+        .forEach(([business, amount]) => {
+          rows.push([
+            `${business}:`,
+            formatMoneyVND(Number(amount)).replace(" ₫", ""),
+          ]);
+        });
+      const total = Object.values(finalTotals).reduce(
+        (sum, amount) => sum + Number(amount || 0),
+        0,
+      );
+      rows.push([
+        "TOTAL NET PAY:",
+        formatMoneyVND(total).replace(" ₫", ""),
+      ]);
+    } else {
+      const netPay = Object.values(finalTotals).reduce(
+        (sum, amount) => sum + Number(amount || 0),
+        0,
+      );
+      const totalAcc = calculationSummary.calculatedTotal || netPay;
+      const totalAe = calculationSummary.aeTotal || netPay;
+      rows.push(
+        ["IV. ĐỐI SOÁT", ""],
+        ["TỔNG AE:", formatMoneyVND(totalAe).replace(" ₫", "")],
+        ["TỔNG ACC:", formatMoneyVND(totalAcc).replace(" ₫", "")],
+        ["LỆCH (DIFF):", formatMoneyVND(totalAcc - totalAe).replace(" ₫", "")],
+      );
+    }
+
+    navigator.clipboard.writeText(
+      rows.map(([label, value]) => `${label}\t${value}`).join("\n"),
+    );
+    toast.success("Đã sao chép riêng phần báo cáo đang xem (2 cột Excel)");
   };
 
   const totalPayoutSum = useMemo(() => {
@@ -2050,31 +2130,62 @@ export function BulkPayment({
 
                     <div className="bu-summary-card border rounded-2xl p-4 shadow-xs flex flex-col gap-3">
                       <div className="flex items-center justify-between border-b pb-2.5">
-                        <div className="relative flex items-center pr-2">
-                          <select
-                            value={selectedBUGroup}
-                            onChange={(e) => setSelectedBUGroup(e.target.value)}
-                            className="title-select-plain appearance-none bg-transparent pl-0 pr-7 py-0.5 font-extrabold text-foreground font-sans text-sm uppercase tracking-wide cursor-pointer focus:outline-none"
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="bu-group-menu-trigger flex min-w-[190px] items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/[0.035] px-3 py-2 text-left text-[13px] font-extrabold uppercase tracking-[0.08em] text-foreground shadow-xs transition-colors hover:border-primary/40 hover:bg-primary/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+                              aria-label="Chọn nhóm BU"
+                            >
+                              <span>
+                                {selectedBUGroup === "ALL"
+                                  ? "ALL BU"
+                                  : `${selectedBUGroup.toUpperCase()} GROUP`}
+                              </span>
+                              <ChevronDown className="h-4 w-4 shrink-0 text-primary" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="start"
+                            sideOffset={6}
+                            className="bu-group-menu-content w-[240px] rounded-xl border border-primary/20 bg-popover p-1.5 text-popover-foreground shadow-xl"
                           >
+                            <DropdownMenuLabel className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                              Chọn phạm vi báo cáo
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-primary/10" />
                             {["ALL", "AHN", "AHP", "ATH", "ATN", "APT", "Other"].map((biz) => {
                               const isAll = biz === "ALL";
                               const targetBUs = ["AHN", "AHP", "ATH", "ATN", "APT", "Other"];
                               const sheet1Val = isAll
-                                ? targetBUs.reduce((sum, b) => sum + (dynamicReportStats.sheet1Totals[b] || 0), 0)
+                                ? targetBUs.reduce((sum, business) => sum + (dynamicReportStats.sheet1Totals[business] || 0), 0)
                                 : (dynamicReportStats.sheet1Totals[biz] || 0);
-                              const holdAddItems = isAll
-                                ? (dynamicReportStats.holdAddItems || [])
-                                : (dynamicReportStats.holdAddItems || []).filter((i) => i.biz === biz);
-                              const hasData = sheet1Val !== 0 || holdAddItems.length > 0;
+                              const hasAdjustments = isAll
+                                ? (dynamicReportStats.holdAddItems || []).length > 0
+                                : (dynamicReportStats.holdAddItems || []).some((item) => item.biz === biz);
+                              const hasData = sheet1Val !== 0 || hasAdjustments;
+                              const selected = selectedBUGroup === biz;
                               return (
-                                <option key={biz} value={biz} className="font-semibold text-xs text-foreground bg-card">
-                                  {isAll ? "ALL BU" : `${biz.toUpperCase()} GROUP`}{hasData ? "" : " (TRỐNG)"}
-                                </option>
+                                <DropdownMenuItem
+                                  key={biz}
+                                  onSelect={() => setSelectedBUGroup(biz)}
+                                  className={`mb-0.5 flex cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-[11px] font-bold uppercase tracking-wide outline-none last:mb-0 ${
+                                    selected
+                                      ? "bg-primary text-primary-foreground focus:bg-primary focus:text-primary-foreground"
+                                      : "text-foreground focus:bg-primary/10 focus:text-primary"
+                                  }`}
+                                >
+                                  <span>{isAll ? "ALL BU" : `${biz.toUpperCase()} GROUP`}</span>
+                                  {selected ? (
+                                    <Check className="h-3.5 w-3.5 shrink-0" />
+                                  ) : !hasData ? (
+                                    <span className="text-[8px] font-bold tracking-wider text-muted-foreground">TRỐNG</span>
+                                  ) : null}
+                                </DropdownMenuItem>
                               );
                             })}
-                          </select>
-                          <ChevronDown className="w-4 h-4 text-muted-foreground absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         <button
                           onClick={() => {
                             const biz = selectedBUGroup;
@@ -2527,7 +2638,7 @@ export function BulkPayment({
                       <button
                         onClick={handleCopyReconciliationSummary}
                         className="p-1 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer"
-                        title="Sao chép toàn bộ báo cáo"
+                        title="Sao chép riêng phần báo cáo đang xem (2 cột Excel)"
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
@@ -2982,7 +3093,7 @@ export function BulkPayment({
             <button
               type="button"
               onClick={() => setShowLeftCard(!showLeftCard)}
-              className={`master-square-action shrink-0 transition-all cursor-pointer active:scale-[0.98] border ${
+              className={`bulk-panel-toggle shrink-0 transition-all cursor-pointer active:scale-[0.98] ${
                 showLeftCard
                   ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
                   : "bg-primary text-white border-primary shadow-xs hover:brightness-90"
@@ -3012,7 +3123,7 @@ export function BulkPayment({
                 </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-50">
                 <DropdownMenuLabel className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                  CHUYỂN BÀNG
+                  CHUYỂN BẢNG
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   onClick={() => {

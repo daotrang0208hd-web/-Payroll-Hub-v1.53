@@ -1745,6 +1745,7 @@ export function TimesheetHub() {
                         <CenterTable
                           tableRef={tableRef}
                           data={searchData}
+                          mktLocalNorthData={mktLocalNorthData}
                           showSidebar={showSidebar}
                           onToggleSidebar={() => setShowSidebar(!showSidebar)}
                         />

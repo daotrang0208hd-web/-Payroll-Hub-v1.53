@@ -321,6 +321,8 @@
   table,
   table th,
   table td,
+  table th *,
+  table td *,
   table input,
   table select,
   table textarea,
@@ -1583,7 +1585,7 @@ tr.total-row td:empty,
   background-color: transparent !important;
   box-shadow: none !important;
   text-align: right !important;
-  font-family: 'Space Grotesk', sans-serif !important;
+  font-family: var(--font-table, var(--font-main)) !important;
 }
 
 header.table-header,
@@ -1880,4 +1882,65 @@ div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-
 
 div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > button:nth-of-type(1) {
   height: 26.9853px !important;
+}
+
+/* A table is one typography context: labels, values and controls all follow
+   the font selected by the user instead of mixing utility fonts. */
+.unified-table-frame :where(
+  table,
+  table *,
+  .table-footer-pagination,
+  .table-footer-pagination *,
+  .unified-table-frame-footer,
+  .unified-table-frame-footer *
+) {
+  font-family: var(--font-table, var(--font-main)) !important;
+}
+
+.bulk-payment-layout :where(.bu-summary-card, .payroll-theme-card),
+.bulk-payment-layout :where(.bu-summary-card, .payroll-theme-card) *,
+.bu-group-menu-content,
+.bu-group-menu-content * {
+  font-family: var(--font-table, var(--font-main)) !important;
+}
+
+/* Bulk Payment panel switch: isolate it from legacy positional overrides that
+   could stretch the icon and render a second circular stroke. */
+.bulk-panel-toggle {
+  display: inline-flex !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border)) !important;
+  border-radius: 9999px !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.bulk-panel-toggle > svg {
+  width: 14px !important;
+  height: 14px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ANALYSIS footer keeps one continuous grid, including intentionally empty
+   label cells, so every footer boundary lines up with the table columns. */
+.analysis-data-table tfoot tr.total-row > td,
+.analysis-data-table tfoot tr.total-row > td:empty {
+  border-top: 1.5px solid var(--grid-line-color, var(--border)) !important;
+  border-bottom: 1px solid var(--grid-line-color, var(--border)) !important;
+  border-right: 1px solid var(--grid-line-color, var(--border)) !important;
+  border-left: 0 !important;
+}
+
+.analysis-data-table tfoot tr.total-row > td:last-child {
+  border-right: 0 !important;
 }

@@ -316,7 +316,7 @@ export function BulkPaymentAnalytics({
           <button
             type="button"
             onClick={onToggleBulkPaymentCard}
-            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-all cursor-pointer active:scale-95 border ${
+            className={`bulk-panel-toggle shrink-0 transition-all cursor-pointer active:scale-95 ${
               isBulkPaymentCardVisible
                 ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
                 : "bg-primary text-white border-primary shadow-xs hover:brightness-90"
@@ -341,7 +341,7 @@ export function BulkPaymentAnalytics({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-50">
               <DropdownMenuLabel className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                CHUYỂN BÀNG
+                CHUYỂN BẢNG
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => onViewChange("table")}
@@ -407,7 +407,7 @@ export function BulkPaymentAnalytics({
               value={effectiveSelectedBusiness}
               onChange={(event) => onSelectedBusinessChange(event.target.value)}
               className="h-[26px] w-auto min-w-[70px] max-w-[170px] appearance-none rounded-none border-0 bg-transparent pl-1 pr-4 text-[10px] font-normal uppercase leading-[20px] text-[var(--card-foreground)] outline-none transition-colors hover:text-primary cursor-pointer shadow-none font-sans"
-              style={{ fontSize: "10px", backgroundColor: "transparent", fontFamily: "'Space Grotesk', sans-serif", textAlign: "right" }}
+              style={{ fontSize: "10px", backgroundColor: "transparent", fontFamily: "var(--font-table, var(--font-main))", textAlign: "right" }}
               title="Chọn BU trên bảng ANALYSIS"
             >
               <option value={allBusinessUnitsValue} className="bg-[var(--card,#fff)] text-[var(--card-foreground,#000)] text-[12px]">Tất cả BU</option>

@@ -1548,7 +1548,6 @@ export function PivotSheet() {
   sortedFlatRows.forEach((row) => {
     lastRowIdByBu.set(row.bu, row.globalRowId);
   });
-  const displayedRangeStart = totalRowsCount === 0 ? 0 : startIndex + 1;
   const pivotLabelColumnSpan = ["no", "business", "charge", "month"].filter(
     (key) => !hiddenColumns[key],
   ).length;
@@ -1761,10 +1760,10 @@ export function PivotSheet() {
   };
 
   return (
-    <div className="pivot-master-frame unified-table-frame flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
+    <div className="pivot-master-frame unified-table-frame relative flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
       {/* HEADER SECTION */}
       <div className="unified-table-frame-header flex min-h-[56px] flex-wrap items-center justify-between gap-3 border-b border-border bg-primary/[0.035] px-3 py-2">
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
             <FileSpreadsheet className="h-4 w-4" />
           </div>
@@ -1774,7 +1773,7 @@ export function PivotSheet() {
               Tổng hợp chi phí theo BU, L07 và loại · {totalCenters} trung tâm
             </p>
           </div>
-          <div className="hidden h-8 items-center border-l border-primary/15 pl-4 sm:flex">
+          <div className="ml-auto hidden h-8 items-center border-l border-primary/15 pl-4 sm:flex">
             <div className="flex flex-col items-end leading-tight">
               <span className="text-[8px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
                 Tổng tiền
@@ -1786,43 +1785,19 @@ export function PivotSheet() {
           </div>
         </div>
 
-        {/* CONTROLS */}
-        <div className="flex items-center flex-wrap gap-2">
-          {/* Month Filter */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 h-[26px]">
-            <span className="text-xs font-semibold text-slate-600">Tháng:</span>
-            <Select value={selectedMonthFilter} onValueChange={(val) => {
-              setSelectedMonthFilter(val);
-              try {
-                localStorage.setItem("pivot_master_selected_month_filter", val);
-              } catch {
-                // ignore
-              }
-            }}>
-              <SelectTrigger className="h-[21px] border-none bg-transparent text-[9px] leading-[9px] font-bold text-amber-900 p-0 shadow-none focus:ring-0 w-[86px]">
-                <SelectValue placeholder="Chọn tháng" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tất cả tháng</SelectItem>
-                {uniqueMonths.map(m => (
-                  <SelectItem key={m} value={m}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* SETTINGS MENU DROPDOWN */}
+        {/* SETTINGS: hiển thị ở chân bảng, giữ DOM tại đây để không tách logic thao tác. */}
+        <div className="absolute bottom-[13px] left-[190px] z-50 flex items-center">
           <div className="relative" ref={settingsMenuRef}>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
+              className="flex h-[26px] w-[26px] cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-all hover:bg-muted active:scale-95"
               title="Cài đặt & Thao tác"
             >
-              <SlidersHorizontal className="w-4 h-4 text-primary" />
+              <SlidersHorizontal className="h-3.5 w-3.5 text-primary" />
             </button>
 
             {isSettingsOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-3.5 flex flex-col gap-3">
+              <div className="absolute bottom-full left-0 z-50 mb-2 flex w-72 flex-col gap-3 rounded-xl border border-border bg-card p-3.5 text-card-foreground shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Settings className="w-4 h-4 text-slate-600" /> Cài đặt & Thao tác
@@ -2166,9 +2141,6 @@ export function PivotSheet() {
               </Select>
             </div>
 
-            <span className="whitespace-nowrap text-[10.5px] font-semibold text-slate-500">
-              {displayedRangeStart} - {endIndex} / {totalRowsCount} dòng
-            </span>
           </div>
 
           <div className="flex h-6 items-center gap-1 border-l border-slate-200 pl-4">
