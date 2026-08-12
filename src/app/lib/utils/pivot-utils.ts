@@ -1,5 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export const PIVOT_CACHE_VERSION = 5;
+import {
+  getBusinessFromL07,
+  resolveMktRosterCenter,
+} from "./center-utils";
+import { parseDurationToHours } from "../schemas/excel-schema";
+
+export const PIVOT_CACHE_VERSION = 6;
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -18,7 +24,17 @@ export function formatPivotTypeHeader(typeRaw: string): string {
   if (cleanUpper === "CENTER MKT" || cleanUpper === "MKT LOCAL NORTH" || cleanUpper === "MKT LOCAL") return "MKT LOCAL";
   if (!t) return "UNSPECIFIED";
 
-  return t.toUpperCase();
+  // The reference Master logic groups every Roster task into the five
+  // standard payroll columns. Some source files contain a suffix/description
+  // after the code, while older files only contain the four-letter prefix.
+  // Canonicalize both variants so amounts cannot be split into hidden columns.
+  if (cleanUpper.startsWith("LPAR")) return "LPAR01";
+  if (cleanUpper.startsWith("LRET")) return "LRET01";
+  if (cleanUpper.startsWith("LDEM")) return "LDEM01";
+  if (cleanUpper.startsWith("LDEC")) return "LDEC01";
+  if (cleanUpper.startsWith("MOTH")) return "MOTH01";
+
+  return cleanUpper;
 }
 
 export function sanitizePivotData(
@@ -177,11 +193,42 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
 
   rosterRows.forEach((row) => {
     if (!row) return;
-    const center = row["chargeToCenterCode"] || row["CHARGE TO CENTER"] || row["Center"] || "";
-    const duration = parseMoney(row["duration"] || row["DURATION"] || row["HOURS"] || 0);
-    const salary = duration > 0 ? duration * 24 * 20000 : parseMoney(row["calculatedSalary"] || row["TOTAL PAYMENT"] || row["TOTAL"] || row["totalPayment"] || 0);
-    const bu = row["bu"] || row["Business"] || "AHN";
-    const l07 = row["l07"] || row["L07"] || center || "MKT LOCAL NORTH";
+    const center = String(
+      row["chargeToCenterCode"] ||
+        row["chargeToCenterMkt"] ||
+        row["CHARGE TO CENTER"] ||
+        row["Charge To Center MKT"] ||
+        row["Center"] ||
+        "",
+    ).trim();
+    const resolvedCenter = resolveMktRosterCenter(center);
+    const l07 = resolvedCenter.l07 || row["l07"] || row["L07"] || "";
+    if (!l07 || String(l07).trim().toUpperCase() === "MKT LOCAL NORTH") return;
+
+    const rawDuration =
+      row["durationHours"] ??
+      row["duration"] ??
+      row["DURATION"] ??
+      row["HOURS"] ??
+      0;
+    const durationHours = row["durationHours"] !== undefined
+      ? parseMoney(row["durationHours"])
+      : parseDurationToHours(rawDuration);
+    const salary = durationHours > 0
+      ? durationHours * 20000
+      : parseMoney(
+          row["calculatedSalary"] ||
+            row["TOTAL PAYMENT"] ||
+            row["TOTAL"] ||
+            row["totalPayment"] ||
+            0,
+        );
+    const bu =
+      resolvedCenter.business ||
+      row["bu"] ||
+      row["Business"] ||
+      row["business"] ||
+      getBusinessFromL07(l07);
     const month = row["month"] || row["_fileMonth"] || row["Tháng"] || "03.2026";
     const rowType = row["type"] || row["Type"] || row["LOẠI"] || row["Phân loại"] || row["Nghiệp vụ"] || "MKT LOCAL";
 

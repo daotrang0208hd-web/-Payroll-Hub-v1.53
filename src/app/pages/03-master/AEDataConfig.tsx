@@ -24,7 +24,10 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import { useAppData } from "../../lib/contexts/AppDataContext";
-import { buildPivotFromAppData } from "../../lib/utils/pivot-utils";
+import {
+  buildPivotFromAppData,
+  PIVOT_CACHE_VERSION,
+} from "../../lib/utils/pivot-utils";
 import {
   parseMoneyToNumber,
   isMoneyColumn,
@@ -1006,13 +1009,17 @@ export function AEDataConfig({
 
                   const notes = iNotes !== -1 && row[iNotes] !== undefined ? String(row[iNotes]).trim() : "";
                   const chargeToCenterMkt = iChargeMkt !== -1 && row[iChargeMkt] !== undefined ? String(row[iChargeMkt]).trim() : "";
+                  const pivotCenter = chargeToCenterMkt || rawCenter;
+                  const pivotCenterInfo = getCenterInfoByAECode(pivotCenter);
+                  const pivotL07 = pivotCenterInfo?.l07 || mapL07(pivotCenter) || l07;
+                  const pivotBusiness = pivotCenterInfo?.bus || business;
 
                   rosterDataToAppend.push({
                     _rowId: crypto.randomUUID(),
                     _sourceFile: item.name || "",
                     center: rawCenter,
-                    l07,
-                    business,
+                    l07: pivotL07,
+                    business: pivotBusiness,
                     ma_nv,
                     full_name,
                     ngay,
@@ -1021,8 +1028,10 @@ export function AEDataConfig({
                     gio_vao,
                     gio_ra,
                     duration,
+                    durationHours: duration,
                     notes,
                     chargeToCenterMkt,
+                    chargeToCenterCode: chargeToCenterMkt,
                     employeeId: ma_nv,
                     fullName: full_name,
                     maAE: rawCenter,
@@ -1031,6 +1040,8 @@ export function AEDataConfig({
                     classCode: className,
                     from: gio_vao,
                     to: gio_ra,
+                    month: normalizeMonth(itemMonth),
+                    _fileMonth: normalizeMonth(itemMonth),
                     isMktLocal: true
                   });
                 }
@@ -2346,72 +2357,19 @@ export function AEDataConfig({
 
       // Đồng bộ dữ liệu Pivot Master
       try {
-        const pivotBuffers: { name: string; bank?: string; buffer: ArrayBuffer }[] = [];
-        for (const item of targets) {
-          if (item.fileObj && item.fileObj instanceof File) {
-            try {
-              const buf = await item.fileObj.arrayBuffer();
-              const upperName = String(item.name || item.fileObj.name).toUpperCase();
-              const pivotBank =
-                String(item.bank || "").toUpperCase().includes("MKT") ||
-                upperName.includes("MKT") ||
-                upperName.includes("MARKETING")
-                  ? "MKT LOCAL NORTH"
-                  : item.bank;
-              pivotBuffers.push({
-                name: item.name || item.fileObj.name,
-                bank: pivotBank,
-                buffer: buf,
-              });
-            } catch (e) {
-              console.warn("Lỗi đọc file buffer cho pivot", e);
-            }
-          }
-        }
-
-        let pivotResult: any = null;
-        if (pivotBuffers.length > 0) {
-          try {
-            const PivotWorker = (await import("../../workers/pivot.worker?worker")).default;
-            pivotResult = await new Promise((resolve, reject) => {
-              const worker = new PivotWorker();
-              worker.onmessage = (e: any) => {
-                worker.terminate();
-                if (e.data.success) {
-                  resolve({
-                    ...e.data.result,
-                    sourceInfo: `Đồng bộ từ ${pivotBuffers.length} file Master`
-                  });
-                } else {
-                  reject(new Error(e.data.error));
-                }
-              };
-              worker.onerror = (err) => {
-                worker.terminate();
-                reject(err);
-              };
-              worker.postMessage(
-                { fileList: pivotBuffers },
-                pivotBuffers.map((item) => item.buffer),
-              );
-            });
-          } catch (wErr) {
-            console.warn("Lỗi worker pivot, chuyển sang fallback:", wErr);
-          }
-        }
-
-        if (!pivotResult || !pivotResult.groupedData || Object.keys(pivotResult.groupedData).length === 0) {
-          const fallback = buildPivotFromAppData(verifiedSheet1Data, [], rosterDataToAppend);
-          pivotResult = {
-            groupedData: fallback.groupedData,
-            typeColumns: fallback.typeColumns,
-            logs: [],
-            sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng dữ liệu Sheet 1`
-          };
-        }
+        const pivotResult = {
+          ...buildPivotFromAppData(
+            verifiedSheet1Data,
+            [],
+            rosterDataToAppend,
+          ),
+          logs: [],
+          sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng Gross Pay và ${rosterDataToAppend.length} dòng Roster`,
+        };
 
         if (pivotResult && pivotResult.groupedData) {
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
+            cacheVersion: PIVOT_CACHE_VERSION,
             groupedData: pivotResult.groupedData,
             typeColumns: pivotResult.typeColumns,
             diagnosticLogs: pivotResult.logs || [],
