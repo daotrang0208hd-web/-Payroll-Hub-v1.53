@@ -453,6 +453,7 @@ export function MasterAE() {
             "Charge Discovery Camp",
             "Charge Summer Outing",
             "Charge Summer Instructors",
+            "Extra Summer Instructors",
             "TOTAL PAYMENT",
           ]
         : activeTab === "Bank_North_AE"

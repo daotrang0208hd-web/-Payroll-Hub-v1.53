@@ -52,6 +52,7 @@ export const INITIAL_APP_DATA: AppData = {
       "Charge Discovery Camp",
       "Charge Summer Outing",
       "Charge Summer Instructors",
+      "Extra Summer Instructors",
       "TOTAL PAYMENT",
       "TÊN FILE",
       "Center",

@@ -13,7 +13,15 @@ import { toast } from "sonner";
 import { AppData } from "../../types";
 import { INITIAL_APP_DATA } from "../../constants/initial-data";
 import { parseMoneyToNumber, removeVietnameseTones, formatIdNumber } from "../utils/data-utils";
-import { resolveL07BuFromAeCode } from "../utils/center-utils";
+import {
+  isNorthMktLocalL07,
+  resolveL07BuFromAeCode,
+} from "../utils/center-utils";
+import {
+  finalizeGrossPayAmounts,
+  isGrossPayChargeAmountColumn,
+  mergeGrossPayHeaders,
+} from "../utils/gross-pay-utils";
 import {
   buildBankAccountIndex,
   getBankAccount,
@@ -156,12 +164,39 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
                 return newRow;
               });
             }
-            if (saved.Sheet1_AE && saved.Sheet1_AE.data && Array.isArray(saved.Sheet1_AE.data)) {
-              saved.Sheet1_AE.data = saved.Sheet1_AE.data.map((row: any) => {
-                const newRow = { ...row };
-                return newRow;
+          }
+
+          // Repair persisted Gross Pay rows immediately after a deployment.
+          // This keeps Sheet 1 independent from Pivot/Roster and prevents old
+          // Excel date values from surviving in amount columns.
+          if (saved.Sheet1_AE?.data && Array.isArray(saved.Sheet1_AE.data)) {
+            const discoveredGrossPayHeaders = new Set<string>();
+            saved.Sheet1_AE.data.forEach((row: any) => {
+              Object.keys(row || {}).forEach((key) => {
+                if (isGrossPayChargeAmountColumn(key)) {
+                  discoveredGrossPayHeaders.add(key);
+                }
               });
-            }
+            });
+            const grossPayHeaders = mergeGrossPayHeaders(
+              saved.Sheet1_AE.headers || [],
+              [...discoveredGrossPayHeaders],
+            );
+            saved.Sheet1_AE.headers = grossPayHeaders;
+            saved.Sheet1_AE.data = saved.Sheet1_AE.data.map((row: any) => {
+              const newRow = { ...row };
+              grossPayHeaders.forEach((header) => {
+                if (isGrossPayChargeAmountColumn(header)) {
+                  newRow[header] = parseMoneyToNumber(newRow[header]);
+                }
+              });
+              finalizeGrossPayAmounts(
+                newRow,
+                grossPayHeaders,
+                isNorthMktLocalL07(newRow.L07),
+              );
+              return newRow;
+            });
           }
           // ------------------------------
 

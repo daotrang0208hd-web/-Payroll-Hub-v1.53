@@ -80,6 +80,13 @@ import {
   resolveNorthMktLocalL07,
 } from "../../lib/utils/center-utils";
 import { parseDurationToHours } from "../../lib/schemas/excel-schema";
+import {
+  finalizeGrossPayAmounts,
+  getGrossPayRowIdentity,
+  getGrossPaySourceChargeColumns,
+  isGrossPayChargeAmountColumn,
+  mergeGrossPayHeaders,
+} from "../../lib/utils/gross-pay-utils";
 import { toast } from "sonner";
 import {
   Tooltip,
@@ -387,6 +394,7 @@ export function AEDataConfig({
     "Charge Discovery Camp",
     "Charge Summer Outing",
     "Charge Summer Instructors",
+    "Extra Summer Instructors",
     "TOTAL PAYMENT",
     "Center",
   ];
@@ -1072,7 +1080,7 @@ export function AEDataConfig({
       const rosterDataToAppend: any[] = [];
       const detectedMktTargetIds = new Set<string>();
       const statusById = new Map<string, string>();
-      const sheet1Headers = [
+      let sheet1Headers = [
         "No.",
         "Tháng báo cáo",
         "L07",
@@ -1096,6 +1104,7 @@ export function AEDataConfig({
         "Charge Discovery Camp",
         "Charge Summer Outing",
         "Charge Summer Instructors",
+        "Extra Summer Instructors",
         "TOTAL PAYMENT",
         "TÊN FILE",
         "Center",
@@ -1971,9 +1980,31 @@ export function AEDataConfig({
                   const h = rows[headerRowIndex].map((c) =>
                     String(c || "").trim(),
                   );
+                  const sourceChargeColumns =
+                    getGrossPaySourceChargeColumns(h);
+                  sheet1Headers = mergeGrossPayHeaders(
+                    sheet1Headers,
+                    sourceChargeColumns.map((column) => column.outputHeader),
+                  );
+                  const sourceChargeColumnsByOutput = new Map<
+                    string,
+                    number[]
+                  >();
+                  sourceChargeColumns.forEach((column) => {
+                    const indexes =
+                      sourceChargeColumnsByOutput.get(column.outputHeader) || [];
+                    indexes.push(column.sourceIndex);
+                    sourceChargeColumnsByOutput.set(column.outputHeader, indexes);
+                  });
                   const colIndices: Record<string, number> = {};
                   sheet1Headers.forEach((th) => {
                     if (th === "L07" || th === "Business") return;
+
+                    if (isGrossPayChargeAmountColumn(th)) {
+                      colIndices[th] =
+                        sourceChargeColumnsByOutput.get(th)?.[0] ?? -1;
+                      return;
+                    }
 
                     const fuzzyMap: Record<string, string[]> = {
                       "Full name": ["FULL NAME", "HỌ VÀ TÊN", "TÊN NHÂN VIÊN"],
@@ -2116,8 +2147,15 @@ export function AEDataConfig({
                     const idxT = colIndices["TOTAL PAYMENT"];
                     const rawTP = idxT !== -1 ? row[idxT] : 0;
                     const numTP = parseMoneyToNumber(rawTP);
+                    const sourceChargeTotal = sourceChargeColumns.reduce(
+                      (sum, column) =>
+                        sum + parseMoneyToNumber(row[column.sourceIndex]),
+                      0,
+                    );
 
-                    if (!accVal && numTP === 0) continue;
+                    if (!accVal && numTP === 0 && sourceChargeTotal === 0) {
+                      continue;
+                    }
 
                     if (
                       (nameVal !== "" || idxName === -1)
@@ -2126,8 +2164,17 @@ export function AEDataConfig({
                       sheet1Headers.forEach((th) => {
                         if (th === "L07" || th === "Business") return;
                         const idx = colIndices[th];
-                        let val =
-                          idx !== -1 && row[idx] !== undefined ? row[idx] : "";
+                        const chargeIndexes =
+                          sourceChargeColumnsByOutput.get(th) || [];
+                        let val = isGrossPayChargeAmountColumn(th)
+                          ? chargeIndexes.reduce(
+                              (sum, sourceIndex) =>
+                                sum + parseMoneyToNumber(row[sourceIndex]),
+                              0,
+                            )
+                          : idx !== -1 && row[idx] !== undefined
+                            ? row[idx]
+                            : "";
 
                         const valStr = String(val).toUpperCase().trim();
                         if (
@@ -2141,6 +2188,25 @@ export function AEDataConfig({
 
                         if (th === "Bank Account Number") {
                           val = accVal;
+                        } else if (th === "ID Number") {
+                          val = cleanIDNumber(val);
+                        } else if (th === "Full name") {
+                          val = nameVal;
+                        } else if (
+                          [
+                            "Salary Scale",
+                            "From",
+                            "To",
+                            "Bank Name",
+                            "CITAD code",
+                            "TAX CODE",
+                            "Contract No",
+                            "Center",
+                          ].includes(th)
+                        ) {
+                          val = val === null || val === undefined
+                            ? ""
+                            : String(val).trim();
                         } else if (isMoneyColumn(th)) {
                           val = parseMoneyToNumber(val);
                         }
@@ -2211,6 +2277,9 @@ export function AEDataConfig({
                       obj["L07"] = l07;
                       obj["Business"] = business;
                       obj["TÊN FILE"] = item.name || "";
+                      obj["_sourceFile"] = item.name || "";
+                      obj["_sourceSheet"] = sheetName;
+                      obj["_sourceRow"] = r + 1;
                       obj["_fileBank"] = effectiveBank;
                       obj["_fileMonth"] = normalizeMonth(itemMonth);
                       obj["Tháng báo cáo"] = normalizeMonth(itemMonth);
@@ -2295,44 +2364,17 @@ export function AEDataConfig({
 
       const finalSheet1Data: any[] = [];
       const seenSheet1Keys = new Set();
-      const chargeCols = [
-        "CHARGE TO LXO",
-        "CHARGE TO EC",
-        "CHARGE TO PT-DEMO",
-        "Charge MKT Local",
-        "CHARGE TO OTHER",
-        "Charge Renewal Projects",
-        "Charge Discovery Camp",
-        "Charge Summer Outing",
-        "Charge Summer Instructors",
-      ];
-
       sheet1Data.forEach((row) => {
-        // Với mọi L07 MKT Local North, chuyển toàn bộ số liệu nguồn OTHER sang
-        // Charge MKT Local. Giá trị âm cũng phải được giữ nguyên.
         const l07Upper = String(row["L07"] || "").trim().toUpperCase();
-        if (isNorthMktLocalL07(l07Upper)) {
-          const otherAmt = parseMoneyToNumber(row["CHARGE TO OTHER"] || 0);
-          if (otherAmt !== 0) {
-            const currentMkt = parseMoneyToNumber(row["Charge MKT Local"] || 0);
-            row["Charge MKT Local"] = currentMkt + otherAmt;
-            row["CHARGE TO OTHER"] = 0;
-          }
-        }
+        finalizeGrossPayAmounts(
+          row,
+          sheet1Headers,
+          isNorthMktLocalL07(l07Upper),
+        );
 
-        let calcPayment = 0;
-        chargeCols.forEach(col => {
-          calcPayment += parseMoneyToNumber(row[col] || 0);
-        });
-        row["TOTAL PAYMENT"] = calcPayment;
-
-        const idNum = String(row["ID Number"] || "").trim();
-        const fname = String(row["Full name"] || "").trim();
-        const l07 = String(row["L07"] || "").trim();
         const rowMonth = normalizeMonth(row["Tháng báo cáo"] || row["_fileMonth"] || appData.globalMonth || "03.2026");
         row["Tháng báo cáo"] = rowMonth;
-        const total = calcPayment;
-        const key = `${idNum}|${fname}|${l07}|${rowMonth}|${total}`;
+        const key = getGrossPayRowIdentity(row, rowMonth);
         if (!seenSheet1Keys.has(key)) {
           row.id = crypto.randomUUID();
           finalSheet1Data.push(row);
@@ -2530,16 +2572,10 @@ export function AEDataConfig({
         const rowsByKey = new Map<string, any>();
         const currentMonth = appData.globalMonth || "03.2026";
         const getRowKey = (row: any) => {
-          const id = String(row?.["ID Number"] || "").trim().toUpperCase();
-          const fullName = String(row?.["Full name"] || "").trim().toUpperCase();
-          const l07 = String(row?.["L07"] || "").trim().toUpperCase();
           const month = normalizeMonth(
             row?.["Tháng báo cáo"] || row?._fileMonth || currentMonth,
           );
-          const total = Math.round(
-            parseMoneyToNumber(row?.["TOTAL PAYMENT"] || 0),
-          );
-          return `${id}|${fullName}|${l07}|${month}|${total}`;
+          return getGrossPayRowIdentity(row, month);
         };
 
         existingRows.forEach((row) => {
@@ -2668,6 +2704,10 @@ export function AEDataConfig({
         // Merge Sheet1_AE with existing data to keep multiple months
         const existingSheet1 = prev.Sheet1_AE?.data || [];
         const sheet1Map = new Map<string, any>();
+        const mergedSheet1Headers = mergeGrossPayHeaders(
+          sheet1Headers,
+          prev.Sheet1_AE?.headers || [],
+        );
         const refreshedSheet1Files = new Set(
           targets
             .filter((target) => !isMktMasterInput(target))
@@ -2678,12 +2718,8 @@ export function AEDataConfig({
 
         const getSheet1Key = (r: any) => {
           if (!r) return "";
-          const id = String(r["ID Number"] || "").trim().toUpperCase();
-          const fname = String(r["Full name"] || "").trim().toUpperCase();
-          const l07 = String(r["L07"] || "").trim().toUpperCase();
           const m = normalizeMonth(r["Tháng báo cáo"] || r["_fileMonth"] || currentMonth);
-          const tp = Math.round(parseMoneyToNumber(r["TOTAL PAYMENT"] || 0));
-          return `${id}|${fname}|${l07}|${m}|${tp}`;
+          return getGrossPayRowIdentity(r, m);
         };
 
         existingSheet1.forEach((row) => {
@@ -2729,7 +2765,7 @@ export function AEDataConfig({
               }
             : prev.Bank_North_AE,
           Sheet1_AE: hasNonMktTargets
-            ? { headers: sheet1Headers, data: mergedSheet1Data }
+            ? { headers: mergedSheet1Headers, data: mergedSheet1Data }
             : prev.Sheet1_AE,
           SoSanh_AE: hasNonMktTargets
             ? {
