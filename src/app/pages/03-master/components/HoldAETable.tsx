@@ -617,7 +617,7 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
             </div>
             <span className="text-slate-400 font-bold text-sm select-none">•</span>
             <h3 className="font-bold uppercase tracking-wider text-primary text-[11px] font-display">
-              DEDUCTIONS AND BENEFITS
+              DEDUCTIONS
             </h3>
           </div>
 

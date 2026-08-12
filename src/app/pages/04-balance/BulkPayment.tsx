@@ -3014,7 +3014,6 @@ export function BulkPayment({
                       ? "ĐỐI SOÁT"
                       : "ANALYSIS"}
                   </span>
-                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-primary/70" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-50">

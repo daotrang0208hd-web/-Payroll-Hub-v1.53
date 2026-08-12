@@ -480,7 +480,7 @@ export function buildBulkPaymentAnalytics({
         "Tháng HOLD": formatPeriod(bucket.occurrencePeriod),
         "Kỳ báo cáo": reportLabel,
         BU: bucket.business,
-        "HOLD phát sinh": holdGross,
+        "HOLD phát sinh": bucket.holdInPeriod,
         "Số dư HOLD đầu kỳ": openingBalance,
         "Thanh toán HOLD tại kỳ": bucket.addInPeriod,
         "Tháng thanh toán tại kỳ":
@@ -496,6 +496,7 @@ export function buildBulkPaymentAnalytics({
     .filter(
       (row) =>
         row["HOLD phát sinh"] > 0 ||
+        row["Số dư HOLD đầu kỳ"] > 0 ||
         row["Thanh toán HOLD tại kỳ"] > 0 ||
         row["CANCEL tại kỳ"] > 0 ||
         row["BONUS tại kỳ"] > 0 ||

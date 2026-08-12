@@ -1,6 +1,7 @@
 import { useMemo } from "react";
+import * as XLSX from "xlsx";
 import {
-  ChevronDown,
+  Download,
   LayoutDashboard,
   RefreshCw,
   Search,
@@ -33,14 +34,13 @@ interface BulkPaymentAnalyticsProps {
   onResetFilters: () => void;
   isBulkPaymentCardVisible: boolean;
   onToggleBulkPaymentCard: () => void;
-  onViewChange: (view: "table" | "reconcile") => void;
+  onViewChange: (view: "table" | "reconcile" | "visuals") => void;
 }
 
-const CONTEXT_GROUP = "Thông tin kỳ theo dõi";
-const ORIGIN_GROUP = "Nguồn gốc HOLD";
-const MOVEMENT_GROUP = "Phát sinh tại kỳ báo cáo";
-const HISTORY_GROUP = "Lịch sử thanh toán";
-const RESULT_GROUP = "Kết quả đến cuối kỳ";
+const CONTEXT_GROUP = "I. THÔNG TIN KỲ THEO DÕI";
+const ORIGIN_GROUP = "II. SỐ DƯ TRƯỚC KỲ BÁO CÁO";
+const MOVEMENT_GROUP = "III. PHÁT SINH TẠI KỲ BÁO CÁO";
+const RESULT_GROUP = "IV. KẾT QUẢ ĐẾN CUỐI KỲ";
 
 const CONTEXT_GROUP_STYLE =
   "!bg-primary/[0.04] !text-primary border-primary/15 tracking-[0.12em]";
@@ -48,15 +48,13 @@ const ORIGIN_GROUP_STYLE =
   "!bg-primary/[0.07] !text-primary border-primary/20 tracking-[0.12em]";
 const MOVEMENT_GROUP_STYLE =
   "!bg-primary/[0.10] !text-primary border-primary/25 tracking-[0.12em]";
-const HISTORY_GROUP_STYLE =
-  "!bg-primary/[0.06] !text-primary border-primary/20 tracking-[0.12em]";
 const RESULT_GROUP_STYLE =
   "!bg-primary/[0.12] !text-primary border-primary/30 tracking-[0.12em]";
 
 const SUMMARY_COLUMNS: Column[] = [
   {
     key: "No.",
-    label: "No.",
+    label: "NO.",
     group: CONTEXT_GROUP,
     groupHeaderClassName: CONTEXT_GROUP_STYLE,
     type: "text",
@@ -81,9 +79,9 @@ const SUMMARY_COLUMNS: Column[] = [
   },
   {
     key: "Tháng HOLD",
-    label: "Tháng phát sinh HOLD",
-    group: CONTEXT_GROUP,
-    groupHeaderClassName: CONTEXT_GROUP_STYLE,
+    label: "THÁNG PHÁT SINH HOLD",
+    group: ORIGIN_GROUP,
+    groupHeaderClassName: ORIGIN_GROUP_STYLE,
     type: "text",
     width: 126,
     align: "center",
@@ -93,33 +91,8 @@ const SUMMARY_COLUMNS: Column[] = [
     footerClassName: "!text-transparent",
   },
   {
-    key: "Kỳ báo cáo",
-    label: "Kỳ đang theo dõi",
-    group: CONTEXT_GROUP,
-    groupHeaderClassName: CONTEXT_GROUP_STYLE,
-    type: "text",
-    width: 116,
-    align: "center",
-    readOnly: true,
-    showGrandTotal: false,
-    footerClassName: "!text-transparent",
-  },
-  {
-    key: "HOLD phát sinh",
-    label: "Tổng HOLD phát sinh",
-    group: ORIGIN_GROUP,
-    groupHeaderClassName: ORIGIN_GROUP_STYLE,
-    type: "money",
-    width: 144,
-    align: "right",
-    headerClassName: "!bg-primary/[0.07] !text-primary",
-    cellClassName: "font-bold text-primary bg-primary/[0.025]",
-    readOnly: true,
-    showGrandTotal: true,
-  },
-  {
     key: "Số dư HOLD đầu kỳ",
-    label: "Số dư trước kỳ báo cáo",
+    label: "SỐ DƯ TRƯỚC KỲ BÁO CÁO",
     group: ORIGIN_GROUP,
     groupHeaderClassName: ORIGIN_GROUP_STYLE,
     type: "money",
@@ -129,8 +102,21 @@ const SUMMARY_COLUMNS: Column[] = [
     showGrandTotal: true,
   },
   {
+    key: "HOLD phát sinh",
+    label: "HOLD PHÁT SINH",
+    group: MOVEMENT_GROUP,
+    groupHeaderClassName: MOVEMENT_GROUP_STYLE,
+    type: "money",
+    width: 136,
+    align: "right",
+    headerClassName: "!bg-primary/[0.07] !text-primary",
+    cellClassName: "font-bold text-primary bg-primary/[0.025]",
+    readOnly: true,
+    showGrandTotal: true,
+  },
+  {
     key: "Thanh toán HOLD tại kỳ",
-    label: "Thanh toán HOLD",
+    label: "THANH TOÁN HOLD",
     group: MOVEMENT_GROUP,
     groupHeaderClassName: MOVEMENT_GROUP_STYLE,
     type: "money",
@@ -140,19 +126,6 @@ const SUMMARY_COLUMNS: Column[] = [
     cellClassName: "font-extrabold text-primary bg-primary/[0.035]",
     readOnly: true,
     showGrandTotal: true,
-  },
-  {
-    key: "Tháng thanh toán tại kỳ",
-    label: "Thanh toán vào tháng",
-    group: MOVEMENT_GROUP,
-    groupHeaderClassName: MOVEMENT_GROUP_STYLE,
-    type: "text",
-    width: 132,
-    align: "center",
-    cellClassName: "font-bold text-primary",
-    readOnly: true,
-    showGrandTotal: false,
-    footerClassName: "!text-transparent",
   },
   {
     key: "CANCEL tại kỳ",
@@ -181,21 +154,8 @@ const SUMMARY_COLUMNS: Column[] = [
     showGrandTotal: true,
   },
   {
-    key: "Các tháng đã thanh toán",
-    label: "Các tháng từng thanh toán HOLD",
-    group: HISTORY_GROUP,
-    groupHeaderClassName: HISTORY_GROUP_STYLE,
-    type: "text",
-    width: 188,
-    align: "left",
-    cellClassName: "font-semibold text-primary",
-    readOnly: true,
-    showGrandTotal: false,
-    footerClassName: "!text-transparent",
-  },
-  {
     key: "Số dư HOLD còn lại",
-    label: "Số dư HOLD còn lại",
+    label: "SỐ DƯ HOLD CÒN LẠI",
     group: RESULT_GROUP,
     groupHeaderClassName: RESULT_GROUP_STYLE,
     type: "money",
@@ -206,20 +166,21 @@ const SUMMARY_COLUMNS: Column[] = [
     cellClassName: "font-extrabold text-primary bg-primary/[0.05]",
   },
   {
-    key: "Diễn biến tại kỳ",
-    label: "Diễn biến kỳ báo cáo",
+    key: "Các tháng đã thanh toán",
+    label: "LỊCH SỬ THANH TOÁN HOLD",
     group: RESULT_GROUP,
     groupHeaderClassName: RESULT_GROUP_STYLE,
     type: "text",
-    width: 166,
+    width: 188,
     align: "left",
+    cellClassName: "font-semibold text-primary",
     readOnly: true,
     showGrandTotal: false,
     footerClassName: "!text-transparent",
   },
   {
     key: "Trạng thái HOLD",
-    label: "Trạng thái HOLD",
+    label: "TRẠNG THÁI HOLD",
     group: RESULT_GROUP,
     groupHeaderClassName: RESULT_GROUP_STYLE,
     type: "text",
@@ -299,6 +260,54 @@ export function BulkPaymentAnalytics({
       ),
     [filteredRows],
   );
+
+  const handleExportAnalysis = () => {
+    if (filteredRows.length === 0) return;
+
+    const groupHeaders = [
+      CONTEXT_GROUP,
+      "",
+      ORIGIN_GROUP,
+      "",
+      MOVEMENT_GROUP,
+      "",
+      "",
+      "",
+      RESULT_GROUP,
+      "",
+      "",
+    ];
+    const columnHeaders = SUMMARY_COLUMNS.map((column) => column.label);
+    const rows = filteredRows.map((row) =>
+      SUMMARY_COLUMNS.map(
+        (column) =>
+          (row as unknown as Record<string, unknown>)[column.key] ?? "",
+      ),
+    );
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      groupHeaders,
+      columnHeaders,
+      ...rows,
+    ]);
+    worksheet["!merges"] = [
+      XLSX.utils.decode_range("A1:B1"),
+      XLSX.utils.decode_range("C1:D1"),
+      XLSX.utils.decode_range("E1:H1"),
+      XLSX.utils.decode_range("I1:K1"),
+    ];
+    worksheet["!cols"] = SUMMARY_COLUMNS.map((column) => ({
+      wch: Math.max(10, Math.min(28, Math.round(Number(column.width || 120) / 7))),
+    }));
+    worksheet["!autofilter"] = { ref: `A2:K${rows.length + 2}` };
+    worksheet["!freeze"] = { xSplit: 0, ySplit: 2 };
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "ANALYSIS");
+    XLSX.writeFile(
+      workbook,
+      `Analysis_Hold_${analytics.currentPeriod.replace(".", "_")}.xlsx`,
+    );
+  };
 
   return (
     <div className="analysis-table-frame unified-table-frame flex h-full min-h-0 w-full flex-col overflow-hidden bg-[var(--card)] text-[var(--card-foreground)]">
@@ -434,6 +443,10 @@ export function BulkPaymentAnalytics({
                 <RefreshCw className="h-4 w-4 shrink-0 text-primary" />
                 <span>Đặt lại bộ lọc</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportAnalysis}>
+                <Download className="h-4 w-4 shrink-0 text-emerald-600" />
+                <span>Xuất Excel bảng Analysis</span>
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() =>
                   window.dispatchEvent(new Event("open-ui-settings"))
@@ -466,7 +479,7 @@ export function BulkPaymentAnalytics({
           isEditable={false}
           externalSearchTerm={searchTerm}
           onExternalSearchChange={onSearchTermChange}
-          storageKey="analys_hold_lifecycle_v9"
+          storageKey="analys_hold_lifecycle_v10"
           className="analysis-data-table !p-0"
           showFooter={true}
           showPagination={true}

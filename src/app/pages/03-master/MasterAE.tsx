@@ -266,7 +266,7 @@ export function MasterAE() {
     () =>
       [
         { id: "Sheet1_AE", label: "Gross Pay", icon: FileText },
-        { id: "Hold_AE", label: "HOLD AE_MASTER", icon: PauseCircle },
+        { id: "Hold_AE", label: "DEDUCTIONS", icon: PauseCircle },
         { id: "BulkPayment", label: "Bulk Payment", icon: CreditCard },
         { id: "Pivot", label: "Pivot Master", icon: Table2 },
       ] as const,

@@ -48,7 +48,7 @@ export function parseMoneyToNumber(val: any): number {
 export function formatNumber(val: any): string {
   const n = parseMoneyToNumber(val);
   const rounded = Math.round(n);
-  return rounded.toLocaleString('en-US', {
+  return rounded.toLocaleString('vi-VN', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   });
@@ -1388,7 +1388,7 @@ export function PivotSheet() {
       charge: widthFor(rowsToMeasure.map((row) => row.l07), "L07", 120, 300),
       month: widthFor(rowsToMeasure.map((row) => row.month), "Tháng", 78, 120),
       grandTotal: widthFor(
-        rowsToMeasure.map((row) => row.rowTotal?.toLocaleString("en-US")),
+        rowsToMeasure.map((row) => row.rowTotal?.toLocaleString("vi-VN")),
         "TỔNG CỘNG",
         110,
         190,
@@ -1397,7 +1397,7 @@ export function PivotSheet() {
 
     safeTypeColumns.forEach((type, typeIndex) => {
       nextWidths[`type_${type}`] = widthFor(
-        rowsToMeasure.map((row) => (row.values[typeIndex] || 0).toLocaleString("en-US")),
+        rowsToMeasure.map((row) => (row.values[typeIndex] || 0).toLocaleString("vi-VN")),
         type,
         88,
         190,
@@ -1449,7 +1449,7 @@ export function PivotSheet() {
       return (
         <tr 
           key={`${item.bu}-${item.l07}-${item.month}`} 
-          className="transition-colors border-b border-[#e7dbdc] bg-white hover:bg-amber-50/40"
+          className="transition-colors border-b border-[#e7dbdc] bg-[var(--card,#fff)] hover:bg-primary/[0.025]"
         >
           {!hiddenColumns.no && (
             <td 
@@ -1470,7 +1470,7 @@ export function PivotSheet() {
             <td 
               style={{ width: columnWidths["business"] || 90, minWidth: columnWidths["business"] || 90, maxWidth: columnWidths["business"] || 90 }}
               onDoubleClick={() => handleStartEdit(item.bu, item.l07, item.month, "bu", item.bu)}
-              className="py-2 px-2.5 text-center border-r border-b border-[#e7dbdc] font-bold text-slate-800 text-xs bg-slate-50/50 cursor-pointer hover:bg-amber-100/60 transition-colors"
+              className="py-2 px-2.5 text-center border-r border-b border-[#e7dbdc] font-bold text-[var(--card-foreground)] text-xs bg-primary/[0.02] cursor-pointer hover:bg-primary/[0.06] transition-colors"
               title="Nhấp đúp để sửa Business"
             >
               {isEditingThisRow && editingCell.field === "bu" ? (
@@ -1494,7 +1494,7 @@ export function PivotSheet() {
             <td 
               style={{ width: columnWidths["charge"] || 220, minWidth: columnWidths["charge"] || 220, maxWidth: columnWidths["charge"] || 220 }}
               onDoubleClick={() => handleStartEdit(item.bu, item.l07, item.month, "l07", item.l07)}
-              className="py-2 px-2.5 text-left border-r border-b border-[#e7dbdc] text-slate-800 font-medium truncate text-xs cursor-pointer hover:bg-amber-100/60 transition-colors"
+              className="py-2 px-2.5 text-left border-r border-b border-[#e7dbdc] text-[var(--card-foreground)] font-medium truncate text-xs cursor-pointer hover:bg-primary/[0.06] transition-colors"
               title={`Nhấp đúp để sửa L07 (${item.l07})`}
             >
               {isEditingThisRow && editingCell.field === "l07" ? (
@@ -1518,7 +1518,7 @@ export function PivotSheet() {
             <td 
               style={{ width: columnWidths["month"] || 90, minWidth: columnWidths["month"] || 90, maxWidth: columnWidths["month"] || 90 }}
               onDoubleClick={() => handleStartEdit(item.bu, item.l07, item.month, "month", item.month)}
-              className="py-2 px-2.5 text-center border-r border-b border-[#e7dbdc] text-slate-700 text-xs font-mono cursor-pointer hover:bg-amber-100/60 transition-colors"
+              className="py-2 px-2.5 text-center border-r border-b border-[#e7dbdc] text-[var(--card-foreground)] text-xs font-mono cursor-pointer hover:bg-primary/[0.06] transition-colors"
               title="Nhấp đúp để sửa Tháng"
             >
               {isEditingThisRow && editingCell.field === "month" ? (
@@ -1549,7 +1549,7 @@ export function PivotSheet() {
                 key={colKey}
                 style={{ width: w, minWidth: w, maxWidth: w }}
                 onDoubleClick={() => handleStartEdit(item.bu, item.l07, item.month, type, val)}
-                className={`py-2 px-2.5 text-right border-r border-b border-[#e7dbdc] font-mono text-xs cursor-pointer hover:bg-amber-100/60 transition-colors ${val > 0 ? "text-slate-900 font-semibold" : "text-slate-300"}`}
+                className={`py-2 px-2.5 text-right border-r border-b border-[#e7dbdc] font-mono text-xs cursor-pointer hover:bg-primary/[0.06] transition-colors ${val > 0 ? "text-[var(--card-foreground)] font-semibold" : "text-[var(--muted-foreground)]"}`}
                 title={`Nhấp đúp để sửa ${type}`}
               >
                 {isEditingThisRow && editingCell.field === type ? (
@@ -1573,7 +1573,7 @@ export function PivotSheet() {
           {!hiddenColumns.grandTotal && (
             <td 
               style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
-              className="py-2 px-3 text-right border-b border-[#e7dbdc] font-mono font-bold text-slate-900 text-xs bg-amber-50/30"
+              className="py-2 px-3 text-right border-b border-[#e7dbdc] font-mono font-bold text-primary text-xs bg-primary/[0.035]"
             >
               {item.rowTotal ? formatNumber(item.rowTotal) : "0"}
             </td>
@@ -1598,18 +1598,28 @@ export function PivotSheet() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#f8f6f0] text-slate-800 font-sans p-0 gap-0">
+    <div className="unified-table-frame flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
       {/* HEADER SECTION */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 border-b border-[#e7dbdc] shadow-2xs">
+      <div className="unified-table-frame-header flex h-[54px] min-h-[54px] flex-wrap items-center justify-between gap-3 border-b border-[#e7dbdc] bg-primary/[0.035] px-3 py-0">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-amber-50 border border-amber-200/80 rounded-[28px] text-amber-700">
-            <FileSpreadsheet className="w-5 h-5" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/20 bg-[var(--card,#fff)] text-primary shadow-2xs">
+            <FileSpreadsheet className="h-3.5 w-3.5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">Bảng Pivot Master</h1>
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+              <h1 className="text-[12px] font-black uppercase tracking-[0.14em] text-primary">Pivot Master</h1>
+              <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2 py-0.5 text-[9px] font-bold text-primary">
                 {totalCenters} Trung tâm
+              </span>
+            </div>
+          </div>
+          <div className="hidden h-8 items-center border-l border-primary/15 pl-4 sm:flex">
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-[8px] font-bold uppercase tracking-widest text-[var(--muted-foreground)]">
+                Tổng tiền
+              </span>
+              <span className="font-mono text-[12px] font-black text-primary">
+                {formatNumber(superGrandTotal)}
               </span>
             </div>
           </div>
@@ -1806,16 +1816,16 @@ export function PivotSheet() {
       </div>
 
       {/* MAIN DATA TABLE */}
-      <div className="unified-table-frame flex-1 min-h-0 bg-white rounded-none border border-[#e7dbdc] shadow-sm flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card,#fff)]">
         <div className="flex-1 overflow-auto relative">
-          <table className="w-full border-collapse text-left text-xs select-none">
-            <thead className="sticky top-0 z-20 bg-slate-100 text-slate-700 border-b border-[#e7dbdc] font-bold shadow-2xs">
+          <table className="w-full border-collapse select-none text-left text-xs" style={{ fontFamily: "var(--font-table, var(--font-mono))", fontSize: "13px" }}>
+            <thead className="sticky top-0 z-20 border-b border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] font-bold text-primary shadow-2xs">
               <tr>
                 {!hiddenColumns.no && (
                   <th 
                     style={{ width: columnWidths["no"] || 50, minWidth: columnWidths["no"] || 50, maxWidth: columnWidths["no"] || 50 }}
                     onClick={() => toggleSort("no")}
-                    className="py-2.5 px-2 text-center border-r border-[#e7dbdc] font-semibold text-slate-600 bg-slate-100/95 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-slate-200/80 transition-colors"
+                    className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                   >
                     <span className="inline-flex items-center justify-center gap-1">
                       No.
@@ -1843,7 +1853,7 @@ export function PivotSheet() {
                   <th 
                     style={{ width: columnWidths["business"] || 90, minWidth: columnWidths["business"] || 90, maxWidth: columnWidths["business"] || 90 }}
                     onClick={() => toggleSort("bu")}
-                    className="py-2.5 px-2.5 text-center border-r border-[#e7dbdc] font-bold text-slate-800 bg-slate-100/95 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-slate-200/80 transition-colors"
+                    className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2.5 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                   >
                     <span>Business</span>
                     <div
@@ -1857,7 +1867,7 @@ export function PivotSheet() {
                   <th 
                     style={{ width: columnWidths["charge"] || 220, minWidth: columnWidths["charge"] || 220, maxWidth: columnWidths["charge"] || 220 }}
                     onClick={() => toggleSort("l07")}
-                    className="py-2.5 px-2.5 text-left border-r border-[#e7dbdc] font-bold text-slate-800 bg-slate-100/95 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-slate-200/80 transition-colors"
+                    className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                   >
                     <span>L07</span>
                     <div
@@ -1871,7 +1881,7 @@ export function PivotSheet() {
                   <th 
                     style={{ width: columnWidths["month"] || 90, minWidth: columnWidths["month"] || 90, maxWidth: columnWidths["month"] || 90 }}
                     onClick={() => toggleSort("month")}
-                    className="py-2.5 px-2.5 text-center border-r border-[#e7dbdc] font-bold text-slate-800 bg-slate-100/95 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-slate-200/80 transition-colors"
+                    className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2.5 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                   >
                     <span>Tháng</span>
                     <div
@@ -1890,7 +1900,7 @@ export function PivotSheet() {
                       key={type}
                       style={{ width: w, minWidth: w, maxWidth: w }}
                       onClick={() => toggleSort(colKey)}
-                      className="py-2.5 px-2.5 text-right border-r border-[#e7dbdc] font-bold text-slate-800 bg-slate-100/95 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-slate-200/80 transition-colors"
+                      className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                     >
                       <span className="truncate block" title={type}>{type}</span>
                       <div
@@ -1905,7 +1915,7 @@ export function PivotSheet() {
                   <th 
                     style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
                     onClick={() => toggleSort("rowTotal")}
-                    className="py-2.5 px-3 text-right font-extrabold text-amber-900 bg-amber-100/80 uppercase text-[10px] tracking-wider relative cursor-pointer hover:bg-amber-200/80 transition-colors"
+                    className="relative cursor-pointer bg-primary/[0.09] px-3 py-2.5 text-right text-[10px] font-extrabold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.14]"
                   >
                     <span>TỔNG CỘNG</span>
                     <div
@@ -1922,11 +1932,11 @@ export function PivotSheet() {
 
             {/* GRAND TOTAL FOOTER ROW */}
             {paginatedRows.length > 0 && (
-              <tfoot className="sticky bottom-0 bg-amber-100/90 font-bold border-t-2 border-amber-300 z-10 shadow-md">
+              <tfoot className="sticky bottom-0 z-10 border-t border-primary/25 bg-primary/[0.085] font-bold text-primary shadow-sm">
                 <tr>
-                  {!hiddenColumns.no && <td className="py-2.5 px-2 text-center border-r-0 text-amber-900 font-mono">TỔNG</td>}
+                  {!hiddenColumns.no && <td className="border-r-0 px-2 py-2.5 text-center font-mono text-primary">TỔNG</td>}
                   {!hiddenColumns.business && <td className="py-2.5 px-2.5 text-center border-r-0"></td>}
-                  {!hiddenColumns.charge && <td className="py-2.5 px-2.5 text-left border-r-0 font-extrabold text-amber-950">TỔNG CỘNG TẤT CẢ</td>}
+                  {!hiddenColumns.charge && <td className="border-r-0 px-2.5 py-2.5 text-left font-extrabold text-primary">TỔNG CỘNG TẤT CẢ</td>}
                   {!hiddenColumns.month && <td className="py-2.5 px-2.5 text-center border-r-0"></td>}
                   {grandTotals.map((v, idx) => {
                     const type = safeTypeColumns[idx];
@@ -1937,7 +1947,7 @@ export function PivotSheet() {
                       <td 
                         key={idx} 
                         style={{ width: w, minWidth: w, maxWidth: w }}
-                        className="py-2.5 px-2.5 text-right border-r border-[#e7dbdc] font-mono font-bold text-amber-950 text-xs"
+                        className="border-r border-[#e7dbdc] px-2.5 py-2.5 text-right font-mono text-xs font-bold text-primary"
                       >
                         {v ? formatNumber(v) : "0"}
                       </td>
@@ -1946,7 +1956,7 @@ export function PivotSheet() {
                   {!hiddenColumns.grandTotal && (
                     <td 
                       style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
-                      className="py-2.5 px-3 text-right font-mono font-extrabold text-amber-950 text-xs bg-amber-200/60"
+                      className="bg-primary/[0.08] px-3 py-2.5 text-right font-mono text-xs font-extrabold text-primary"
                     >
                       {superGrandTotal ? formatNumber(superGrandTotal) : "0"}
                     </td>
@@ -1959,7 +1969,7 @@ export function PivotSheet() {
 
         {/* PAGINATION FOOTER — đồng bộ với các bảng Master */}
         <div
-          className="flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-t border-[#e7dbdc] bg-[#FDFBF7] px-6 py-1.5 text-slate-600"
+          className="unified-table-frame-footer flex min-h-[52px] flex-wrap items-center justify-between gap-3 border-t border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-6 py-1.5 text-[var(--muted-foreground)]"
         >
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5">
