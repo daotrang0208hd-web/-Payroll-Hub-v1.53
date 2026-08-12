@@ -22,8 +22,15 @@ import {
 } from "lucide-react";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import {
+  applyPivotMktTypeCache,
   buildPivotFromAppData,
+  formatPivotTypeHeader,
+  getPivotDataMonths,
+  readPivotMktTypeCache,
   PIVOT_CACHE_VERSION,
+  updatePivotMktTypeCache,
+  writePivotMktTypeCache,
+  type PivotGroupedData,
 } from "../../lib/utils/pivot-utils";
 import { resolveMktRosterCenter } from "../../lib/utils/center-utils";
 import { parseDurationToHours } from "../../lib/schemas/excel-schema";
@@ -116,38 +123,6 @@ export function generateUUID(): string { return Math.random().toString(36).subst
 export async function fetchGoogleSheetAsFile(url: string, name: string): Promise<File> { return new File([], name); }
 export function isMoneyColumn(col: string): boolean { return Boolean(col && col.toLowerCase().includes('money')); }
 export async function fetchWithBackoff(fn: any): Promise<any> { return await fn(); }
-
-type PivotGroupedData = Record<
-  string,
-  Record<string, Record<string, Record<string, number>>>
->;
-
-function mergePivotGroupedData(
-  currentData: PivotGroupedData,
-  incomingData: PivotGroupedData,
-): PivotGroupedData {
-  const merged: PivotGroupedData = {};
-
-  [currentData, incomingData].forEach((source) => {
-    Object.entries(source || {}).forEach(([bu, l07Rows]) => {
-      if (!merged[bu]) merged[bu] = {};
-      Object.entries(l07Rows || {}).forEach(([l07, monthRows]) => {
-        if (!merged[bu][l07]) merged[bu][l07] = {};
-        Object.entries(monthRows || {}).forEach(([month, typeRows]) => {
-          if (!merged[bu][l07][month]) merged[bu][l07][month] = {};
-          Object.entries(typeRows || {}).forEach(([type, rawAmount]) => {
-            const amount = Number(rawAmount);
-            if (!Number.isFinite(amount)) return;
-            merged[bu][l07][month][type] =
-              (merged[bu][l07][month][type] || 0) + amount;
-          });
-        });
-      });
-    });
-  });
-
-  return merged;
-}
 
 function mergePivotTypeColumns(
   currentColumns: string[],
@@ -743,8 +718,24 @@ export function PivotSheet() {
       const detail = (event as CustomEvent).detail || {};
       if (!detail.groupedData || typeof detail.groupedData !== "object") return;
 
-      setGroupedData(detail.groupedData);
-      setTypeColumns(Array.isArray(detail.typeColumns) ? detail.typeColumns : []);
+      const incomingTypeColumns = Array.isArray(detail.typeColumns)
+        ? detail.typeColumns
+        : [];
+      const mktTypeCache = readPivotMktTypeCache(
+        detail.groupedData,
+        incomingTypeColumns,
+      );
+      const restoredGroupedData = applyPivotMktTypeCache(
+        detail.groupedData,
+        mktTypeCache,
+      );
+      const restoredTypeColumns = mergePivotTypeColumns(
+        incomingTypeColumns,
+        mktTypeCache.typeColumns,
+      );
+
+      setGroupedData(restoredGroupedData);
+      setTypeColumns(restoredTypeColumns);
       setDiagnosticLogs(
         Array.isArray(detail.diagnosticLogs) ? detail.diagnosticLogs : [],
       );
@@ -758,7 +749,11 @@ export function PivotSheet() {
 
   const processFileBuffers = useCallback(async (fileList: { name: string; bank?: string; buffer: ArrayBuffer; month: string }[]) => {
     const newGroupedData: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+    const mktGroupedData: PivotGroupedData = {};
     const uniqueTypes = new Set<string>();
+    const mktTypeColumns = new Set<string>();
+    const mktMonths = new Set<string>();
+    let processedMktFiles = 0;
     const newLogs: any[] = [];
 
     for (const item of fileList) {
@@ -890,6 +885,8 @@ export function PivotSheet() {
           });
 
           if (centerColIdx === -1 || typeColIdx === -1 || durationColIdx === -1) continue;
+          processedMktFiles += 1;
+          mktMonths.add(item.month);
 
           for (let i = headerRowIdx + 1; i < jsonData.length; i++) {
             const row = jsonData[i];
@@ -911,13 +908,27 @@ export function PivotSheet() {
             const calculatedSalary = durationHours * 20000;
             if (calculatedSalary === 0) continue;
 
-            const typeVal = String(row[typeColIdx] ?? "").trim().toUpperCase() || "UNSPECIFIED";
+            const typeVal = formatPivotTypeHeader(
+              String(row[typeColIdx] ?? "").trim() || "UNSPECIFIED",
+            );
+            if (typeVal === "EXCLUDE") continue;
             uniqueTypes.add(typeVal);
+            mktTypeColumns.add(typeVal);
 
             if (!newGroupedData[bu][l07][item.month][typeVal]) {
               newGroupedData[bu][l07][item.month][typeVal] = 0;
             }
             newGroupedData[bu][l07][item.month][typeVal] += calculatedSalary;
+
+            if (!mktGroupedData[bu]) mktGroupedData[bu] = {};
+            if (!mktGroupedData[bu][l07]) mktGroupedData[bu][l07] = {};
+            if (!mktGroupedData[bu][l07][item.month]) {
+              mktGroupedData[bu][l07][item.month] = {};
+            }
+            if (!mktGroupedData[bu][l07][item.month][typeVal]) {
+              mktGroupedData[bu][l07][item.month][typeVal] = 0;
+            }
+            mktGroupedData[bu][l07][item.month][typeVal] += calculatedSalary;
           }
         }
       } catch (err) {
@@ -940,6 +951,10 @@ export function PivotSheet() {
     return {
       groupedData: newGroupedData,
       typeColumns: Array.from(uniqueTypes).sort(),
+      mktGroupedData,
+      mktTypeColumns: Array.from(mktTypeColumns).sort(),
+      mktMonths: Array.from(mktMonths).sort(),
+      processedMktFiles,
       logs: newLogs,
     };
   }, []);
@@ -952,10 +967,19 @@ export function PivotSheet() {
 
   const loadMasterData = useCallback(async (showToastMsg = false) => {
     const cachedStr = localStorage.getItem("pivot_master_processed_data");
-    if (!showToastMsg && cachedStr) {
+    let cachedGroupedData: PivotGroupedData = {};
+    let cachedTypeColumns: string[] = [];
+    if (cachedStr) {
       try {
         const parsed = JSON.parse(cachedStr);
+        if (parsed.cacheVersion === PIVOT_CACHE_VERSION) {
+          cachedGroupedData = parsed.groupedData || {};
+          cachedTypeColumns = Array.isArray(parsed.typeColumns)
+            ? parsed.typeColumns
+            : [];
+        }
         if (
+          !showToastMsg &&
           parsed.cacheVersion === PIVOT_CACHE_VERSION &&
           parsed.groupedData &&
           Object.keys(parsed.groupedData).length > 0
@@ -984,22 +1008,49 @@ export function PivotSheet() {
       // Ưu tiên dữ liệu đã được bảng Master xử lý để đồng bộ nhanh và không
       // parse lại hàng loạt file Excel trên main thread.
       if (processedSheet1.length > 0 || processedRoster.length > 0) {
-        const res = buildPivotFromAppData(
+        const baseResult = buildPivotFromAppData(
           processedSheet1,
           [],
-          processedRoster,
+          [],
         );
-        setGroupedData(res?.groupedData || {});
-        setTypeColumns(res?.typeColumns || []);
+        const rosterResult = buildPivotFromAppData([], [], processedRoster);
+        let mktTypeCache = readPivotMktTypeCache(
+          cachedGroupedData,
+          cachedTypeColumns,
+        );
+
+        // Chỉ thay snapshot TYPE khi Master thực sự có dữ liệu MKT Local.
+        // Nếu đợt tải Master thiếu file MKT, cache cũ được giữ nguyên.
+        if (processedRoster.length > 0) {
+          mktTypeCache = updatePivotMktTypeCache(
+            mktTypeCache,
+            rosterResult.groupedData || {},
+            rosterResult.typeColumns || [],
+            getPivotDataMonths(rosterResult.groupedData || {}),
+          );
+          writePivotMktTypeCache(mktTypeCache);
+        }
+
+        const restoredGroupedData = applyPivotMktTypeCache(
+          baseResult.groupedData || {},
+          mktTypeCache,
+        );
+        const restoredTypeColumns = mergePivotTypeColumns(
+          baseResult.typeColumns || [],
+          mktTypeCache.typeColumns,
+        );
+
+        setGroupedData(restoredGroupedData);
+        setTypeColumns(restoredTypeColumns);
         setDiagnosticLogs([]);
-        const infoStr = `Đồng bộ từ Master (${processedSheet1.length} dòng Gross Pay, ${processedRoster.length} dòng MKT Local)`;
+        const infoStr = `Đồng bộ từ Master (${processedSheet1.length} dòng Gross Pay, ${processedRoster.length} dòng MKT Local; đã giữ TYPE MKT đã lưu)`;
         _setSourceInfo(infoStr);
 
         try {
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
             cacheVersion: PIVOT_CACHE_VERSION,
-            groupedData: res?.groupedData || {},
-            typeColumns: res?.typeColumns || [],
+            groupedData: restoredGroupedData,
+            typeColumns: restoredTypeColumns,
             diagnosticLogs: [],
             sourceInfo: infoStr,
             filter: selectedMonthFilter,
@@ -1045,6 +1096,20 @@ export function PivotSheet() {
         resTypes = res?.typeColumns || [];
         setDiagnosticLogs(res?.logs || []);
         infoStr = `Đồng bộ từ ${fileBuffers.length} file Master`;
+
+        if ((res?.processedMktFiles || 0) > 0) {
+          const currentMktTypeCache = readPivotMktTypeCache(
+            cachedGroupedData,
+            cachedTypeColumns,
+          );
+          const nextMktTypeCache = updatePivotMktTypeCache(
+            currentMktTypeCache,
+            res?.mktGroupedData || {},
+            res?.mktTypeColumns || [],
+            res?.mktMonths || [],
+          );
+          writePivotMktTypeCache(nextMktTypeCache);
+        }
       }
 
       if (appData.Sheet1_AE?.data && appData.Sheet1_AE.data.length > 0) {
@@ -1080,15 +1145,28 @@ export function PivotSheet() {
       }
 
       if (Object.keys(resGrouped).length > 0) {
-        setGroupedData(resGrouped);
-        setTypeColumns(resTypes);
+        const mktTypeCache = readPivotMktTypeCache(
+          cachedGroupedData,
+          cachedTypeColumns,
+        );
+        const restoredGroupedData = applyPivotMktTypeCache(
+          resGrouped,
+          mktTypeCache,
+        );
+        const restoredTypeColumns = mergePivotTypeColumns(
+          resTypes,
+          mktTypeCache.typeColumns,
+        );
+
+        setGroupedData(restoredGroupedData);
+        setTypeColumns(restoredTypeColumns);
         _setSourceInfo(infoStr);
 
         try {
           localStorage.setItem("pivot_master_processed_data", JSON.stringify({
             cacheVersion: PIVOT_CACHE_VERSION,
-            groupedData: resGrouped,
-            typeColumns: resTypes,
+            groupedData: restoredGroupedData,
+            typeColumns: restoredTypeColumns,
             diagnosticLogs,
             sourceInfo: infoStr,
             filter: selectedMonthFilter,
@@ -1150,20 +1228,41 @@ export function PivotSheet() {
       }
 
       const res = await processFileBuffers(fileBuffers);
-      const mergedGroupedData = mergePivotGroupedData(
+      if ((res?.processedMktFiles || 0) === 0) {
+        toast.error(
+          "Không tìm thấy sheet Roster hoặc Q_Roster hợp lệ trong file MKT Local North.",
+        );
+        return;
+      }
+
+      const currentMktTypeCache = readPivotMktTypeCache(
         safeGroupedData,
-        res?.groupedData || {},
+        safeTypeColumns,
+      );
+      const nextMktTypeCache = updatePivotMktTypeCache(
+        currentMktTypeCache,
+        res?.mktGroupedData || {},
+        res?.mktTypeColumns || [],
+        res?.mktMonths || [],
+      );
+      writePivotMktTypeCache(nextMktTypeCache);
+
+      // Áp dụng snapshot TYPE bằng phép thay thế có chọn lọc. Các cột không
+      // thuộc MKT Local North không bị xóa, cộng thêm hay thay đổi giá trị.
+      const mergedGroupedData = applyPivotMktTypeCache(
+        safeGroupedData,
+        nextMktTypeCache,
       );
       const mergedTypeColumns = mergePivotTypeColumns(
         safeTypeColumns,
-        res?.typeColumns || [],
+        nextMktTypeCache.typeColumns,
       );
       const mergedLogs = [...diagnosticLogs, ...(res?.logs || [])];
 
       setGroupedData(mergedGroupedData);
       setTypeColumns(mergedTypeColumns);
       setDiagnosticLogs(mergedLogs);
-      const infoStr = `Đã bổ sung ${fileBuffers.length} file vào dữ liệu Pivot hiện có`;
+      const infoStr = `Đã cập nhật ${res.processedMktFiles} file MKT Local (${nextMktTypeCache.typeColumns.length} cột TYPE); giữ nguyên các cột khác`;
       _setSourceInfo(infoStr);
 
       try {
@@ -1180,7 +1279,7 @@ export function PivotSheet() {
         // ignore cache write error
       }
       toast.success(
-        `Đã bổ sung ${fileBuffers.length} file; dữ liệu và các cột cũ được giữ nguyên`,
+        `Đã cập nhật ${res.processedMktFiles} file MKT Local; ${nextMktTypeCache.typeColumns.length} cột TYPE đã được ghi nhớ, các cột khác giữ nguyên`,
       );
     } catch (err) {
       console.error("Error processing manual upload:", err);

@@ -25,8 +25,14 @@ import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import {
+  applyPivotMktTypeCache,
   buildPivotFromAppData,
+  getPivotDataMonths,
+  readPivotMktTypeCache,
   PIVOT_CACHE_VERSION,
+  PIVOT_MKT_TYPE_CACHE_KEY,
+  updatePivotMktTypeCache,
+  writePivotMktTypeCache,
 } from "../../lib/utils/pivot-utils";
 import {
   parseMoneyToNumber,
@@ -385,6 +391,8 @@ export function AEDataConfig({
       Q_Staff: [],
       Q_Cache: [],
     }));
+    localStorage.removeItem("pivot_master_processed_data");
+    localStorage.removeItem(PIVOT_MKT_TYPE_CACHE_KEY);
     setShowClearDialog(false);
     toast.success("Đã xóa toàn bộ dữ liệu và trạng thái.");
   };
@@ -2357,14 +2365,75 @@ export function AEDataConfig({
 
       // Đồng bộ dữ liệu Pivot Master
       try {
+        const retainedRosterRows = (appData.Q_Roster || []).filter(
+          (row: any) =>
+            !targets.some((target) => target.name === row?._sourceFile),
+        );
+        const rosterRowsForPivot = [
+          ...retainedRosterRows,
+          ...rosterDataToAppend,
+        ];
+        const basePivotResult = buildPivotFromAppData(
+          verifiedSheet1Data,
+          [],
+          [],
+        );
+        const rosterPivotResult = buildPivotFromAppData(
+          [],
+          [],
+          rosterRowsForPivot,
+        );
+
+        let cachedPivotGroupedData = {};
+        let cachedPivotTypeColumns: string[] = [];
+        try {
+          const rawPivotCache = localStorage.getItem(
+            "pivot_master_processed_data",
+          );
+          if (rawPivotCache) {
+            const parsedPivotCache = JSON.parse(rawPivotCache);
+            if (parsedPivotCache.cacheVersion === PIVOT_CACHE_VERSION) {
+              cachedPivotGroupedData = parsedPivotCache.groupedData || {};
+              cachedPivotTypeColumns = Array.isArray(
+                parsedPivotCache.typeColumns,
+              )
+                ? parsedPivotCache.typeColumns
+                : [];
+            }
+          }
+        } catch {
+          // Nếu cache tổng bị lỗi, cache TYPE riêng vẫn tiếp tục được sử dụng.
+        }
+
+        let mktTypeCache = readPivotMktTypeCache(
+          cachedPivotGroupedData,
+          cachedPivotTypeColumns,
+        );
+        if (rosterRowsForPivot.length > 0) {
+          mktTypeCache = updatePivotMktTypeCache(
+            mktTypeCache,
+            rosterPivotResult.groupedData || {},
+            rosterPivotResult.typeColumns || [],
+            getPivotDataMonths(rosterPivotResult.groupedData || {}),
+          );
+          writePivotMktTypeCache(mktTypeCache);
+        }
+
+        const pivotGroupedData = applyPivotMktTypeCache(
+          basePivotResult.groupedData || {},
+          mktTypeCache,
+        );
+        const pivotTypeColumns = Array.from(
+          new Set([
+            ...(basePivotResult.typeColumns || []),
+            ...mktTypeCache.typeColumns,
+          ]),
+        );
         const pivotResult = {
-          ...buildPivotFromAppData(
-            verifiedSheet1Data,
-            [],
-            rosterDataToAppend,
-          ),
+          groupedData: pivotGroupedData,
+          typeColumns: pivotTypeColumns,
           logs: [],
-          sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng Gross Pay và ${rosterDataToAppend.length} dòng Roster`,
+          sourceInfo: `Đồng bộ từ ${verifiedSheet1Data.length} dòng Gross Pay và ${rosterRowsForPivot.length} dòng Roster; giữ TYPE MKT đã lưu khi thiếu file`,
         };
 
         if (pivotResult && pivotResult.groupedData) {

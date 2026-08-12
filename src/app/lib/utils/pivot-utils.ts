@@ -6,6 +6,21 @@ import {
 import { parseDurationToHours } from "../schemas/excel-schema";
 
 export const PIVOT_CACHE_VERSION = 7;
+export const PIVOT_MKT_TYPE_CACHE_KEY = "pivot_master_mkt_type_data";
+export const PIVOT_MKT_TYPE_CACHE_VERSION = 1;
+
+export type PivotGroupedData = Record<
+  string,
+  Record<string, Record<string, Record<string, number>>>
+>;
+
+export interface PivotMktTypeCache {
+  cacheVersion: number;
+  groupedData: PivotGroupedData;
+  typeColumns: string[];
+  months: string[];
+  updatedAt: number;
+}
 
 export function formatPivotTypeHeader(typeRaw: string): string {
   if (!typeRaw) return "UNSPECIFIED";
@@ -35,6 +50,220 @@ export function formatPivotTypeHeader(typeRaw: string): string {
   if (cleanUpper.startsWith("MOTH")) return "MOTH01";
 
   return cleanUpper;
+}
+
+export function isMktRosterTypeColumn(typeRaw: string): boolean {
+  const type = formatPivotTypeHeader(typeRaw);
+  return /^(LDEC|LDEM|LPAR|LRET|MOTH)/.test(type);
+}
+
+const clonePivotGroupedData = (data: PivotGroupedData = {}): PivotGroupedData =>
+  JSON.parse(JSON.stringify(data || {}));
+
+export function getPivotDataMonths(data: PivotGroupedData = {}): string[] {
+  const months = new Set<string>();
+  Object.values(data || {}).forEach((l07Rows) => {
+    Object.values(l07Rows || {}).forEach((monthRows) => {
+      Object.keys(monthRows || {}).forEach((month) => {
+        const normalized = String(month || "").trim();
+        if (normalized) months.add(normalized);
+      });
+    });
+  });
+  return Array.from(months);
+}
+
+export function extractPivotMktTypeData(
+  data: PivotGroupedData = {},
+  knownTypeColumns: string[] = [],
+): PivotMktTypeCache {
+  const managedTypes = new Set(
+    (knownTypeColumns || [])
+      .map(formatPivotTypeHeader)
+      .filter(isMktRosterTypeColumn),
+  );
+  const groupedData: PivotGroupedData = {};
+  const months = new Set<string>();
+
+  Object.entries(data || {}).forEach(([bu, l07Rows]) => {
+    Object.entries(l07Rows || {}).forEach(([l07, monthRows]) => {
+      Object.entries(monthRows || {}).forEach(([month, typeRows]) => {
+        Object.entries(typeRows || {}).forEach(([rawType, rawAmount]) => {
+          const type = formatPivotTypeHeader(rawType);
+          if (!managedTypes.has(type) && !isMktRosterTypeColumn(type)) return;
+          const amount = Number(rawAmount);
+          if (!Number.isFinite(amount)) return;
+
+          managedTypes.add(type);
+          months.add(month);
+          if (!groupedData[bu]) groupedData[bu] = {};
+          if (!groupedData[bu][l07]) groupedData[bu][l07] = {};
+          if (!groupedData[bu][l07][month]) groupedData[bu][l07][month] = {};
+          groupedData[bu][l07][month][type] =
+            (groupedData[bu][l07][month][type] || 0) + amount;
+        });
+      });
+    });
+  });
+
+  return {
+    cacheVersion: PIVOT_MKT_TYPE_CACHE_VERSION,
+    groupedData,
+    typeColumns: Array.from(managedTypes).sort(),
+    months: Array.from(months).sort(),
+    updatedAt: Date.now(),
+  };
+}
+
+export function readPivotMktTypeCache(
+  fallbackData: PivotGroupedData = {},
+  fallbackTypeColumns: string[] = [],
+): PivotMktTypeCache {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const cached = localStorage.getItem(PIVOT_MKT_TYPE_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (
+          parsed?.cacheVersion === PIVOT_MKT_TYPE_CACHE_VERSION &&
+          parsed.groupedData &&
+          Array.isArray(parsed.typeColumns) &&
+          Array.isArray(parsed.months)
+        ) {
+          return parsed as PivotMktTypeCache;
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Không thể đọc cache TYPE MKT Local của Pivot Master", error);
+  }
+
+  // Migration cho dữ liệu đã có trước khi tách cache TYPE MKT Local.
+  return extractPivotMktTypeData(fallbackData, fallbackTypeColumns);
+}
+
+export function writePivotMktTypeCache(cache: PivotMktTypeCache): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(PIVOT_MKT_TYPE_CACHE_KEY, JSON.stringify(cache));
+    }
+  } catch (error) {
+    console.warn("Không thể lưu cache TYPE MKT Local của Pivot Master", error);
+  }
+}
+
+export function updatePivotMktTypeCache(
+  currentCache: PivotMktTypeCache,
+  incomingData: PivotGroupedData,
+  incomingTypeColumns: string[],
+  affectedMonths: string[],
+): PivotMktTypeCache {
+  const monthsToReplace = new Set(
+    (affectedMonths || []).map((month) => String(month || "").trim()).filter(Boolean),
+  );
+  const groupedData = clonePivotGroupedData(currentCache?.groupedData || {});
+
+  // File MKT cua mot thang la nguon chinh thuc cho cac cot TYPE cua thang do.
+  // Xoa snapshot TYPE cu cua dung thang truoc khi nap snapshot moi de khong
+  // cong trung khi nguoi dung tai lai cung mot file.
+  Object.keys(groupedData).forEach((bu) => {
+    Object.keys(groupedData[bu] || {}).forEach((l07) => {
+      Object.keys(groupedData[bu][l07] || {}).forEach((month) => {
+        if (monthsToReplace.has(month)) delete groupedData[bu][l07][month];
+      });
+      if (Object.keys(groupedData[bu][l07] || {}).length === 0) {
+        delete groupedData[bu][l07];
+      }
+    });
+    if (Object.keys(groupedData[bu] || {}).length === 0) delete groupedData[bu];
+  });
+
+  const managedTypes = new Set(
+    [...(currentCache?.typeColumns || []), ...(incomingTypeColumns || [])]
+      .map(formatPivotTypeHeader)
+      .filter((type) => type && type !== "EXCLUDE"),
+  );
+
+  Object.entries(incomingData || {}).forEach(([bu, l07Rows]) => {
+    Object.entries(l07Rows || {}).forEach(([l07, monthRows]) => {
+      Object.entries(monthRows || {}).forEach(([month, typeRows]) => {
+        if (monthsToReplace.size > 0 && !monthsToReplace.has(month)) return;
+        Object.entries(typeRows || {}).forEach(([rawType, rawAmount]) => {
+          const type = formatPivotTypeHeader(rawType);
+          if (!managedTypes.has(type)) return;
+          const amount = Number(rawAmount);
+          if (!Number.isFinite(amount)) return;
+
+          if (!groupedData[bu]) groupedData[bu] = {};
+          if (!groupedData[bu][l07]) groupedData[bu][l07] = {};
+          if (!groupedData[bu][l07][month]) groupedData[bu][l07][month] = {};
+          groupedData[bu][l07][month][type] =
+            (groupedData[bu][l07][month][type] || 0) + amount;
+        });
+      });
+    });
+  });
+
+  return {
+    cacheVersion: PIVOT_MKT_TYPE_CACHE_VERSION,
+    groupedData,
+    typeColumns: Array.from(managedTypes).sort(),
+    months: Array.from(
+      new Set([...(currentCache?.months || []), ...monthsToReplace]),
+    ).sort(),
+    updatedAt: Date.now(),
+  };
+}
+
+export function applyPivotMktTypeCache(
+  baseData: PivotGroupedData,
+  cache: PivotMktTypeCache,
+): PivotGroupedData {
+  const result = clonePivotGroupedData(baseData || {});
+  const managedTypes = new Set(
+    (cache?.typeColumns || []).map(formatPivotTypeHeader).filter(Boolean),
+  );
+  const managedMonths = new Set(cache?.months || []);
+
+  // Chi xoa/cap nhat cac cot TYPE MKT trong cac thang da duoc quan ly.
+  // Toan bo cot Gross Pay/Pivot khac van duoc giu nguyen.
+  Object.keys(result).forEach((bu) => {
+    Object.keys(result[bu] || {}).forEach((l07) => {
+      Object.entries(result[bu][l07] || {}).forEach(([month, typeRows]) => {
+        if (!managedMonths.has(month)) return;
+        Object.keys(typeRows || {}).forEach((rawType) => {
+          if (managedTypes.has(formatPivotTypeHeader(rawType))) {
+            delete typeRows[rawType];
+          }
+        });
+        if (Object.keys(typeRows || {}).length === 0) {
+          delete result[bu][l07][month];
+        }
+      });
+      if (Object.keys(result[bu][l07] || {}).length === 0) delete result[bu][l07];
+    });
+    if (Object.keys(result[bu] || {}).length === 0) delete result[bu];
+  });
+
+  Object.entries(cache?.groupedData || {}).forEach(([bu, l07Rows]) => {
+    Object.entries(l07Rows || {}).forEach(([l07, monthRows]) => {
+      Object.entries(monthRows || {}).forEach(([month, typeRows]) => {
+        Object.entries(typeRows || {}).forEach(([rawType, rawAmount]) => {
+          const type = formatPivotTypeHeader(rawType);
+          if (!managedTypes.has(type)) return;
+          const amount = Number(rawAmount);
+          if (!Number.isFinite(amount)) return;
+
+          if (!result[bu]) result[bu] = {};
+          if (!result[bu][l07]) result[bu][l07] = {};
+          if (!result[bu][l07][month]) result[bu][l07][month] = {};
+          result[bu][l07][month][type] = amount;
+        });
+      });
+    });
+  });
+
+  return result;
 }
 
 export function sanitizePivotData(
