@@ -198,6 +198,26 @@ function isValidColor(color: unknown): boolean {
   );
 }
 
+export function normalizeCssLength(value?: string): string | undefined {
+  const clean = value?.trim();
+  if (!clean) return undefined;
+  if (/^-?\d+(?:\.\d+)?$/.test(clean)) return `${clean}px`;
+  return clean;
+}
+
+export function isSafeCustomSelector(selector: unknown): selector is string {
+  if (typeof selector !== "string") return false;
+  const clean = selector.trim();
+  if (!clean || clean.length > 500 || /[{};@]/.test(clean)) return false;
+  if (typeof document === "undefined") return true;
+  try {
+    document.querySelector(clean);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type RgbColor = { r: number; g: number; b: number };
 
 function parseCssColor(color: string): RgbColor | null {
@@ -431,6 +451,10 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
     root.style.setProperty("--stripe-color2", settings.stripeColor2);
   if (settings.gridLineColor)
     root.style.setProperty("--grid-line-color", settings.gridLineColor);
+  if (settings.gridLineColor) {
+    root.style.setProperty("--table-grid-color", settings.gridLineColor);
+    root.style.setProperty("--table-border-color", settings.gridLineColor);
+  }
   root.style.setProperty("--table-header-bg", settings.tableHeaderBg || "#FAF3E8");
 
   if (settings.titleAlign) {
@@ -489,6 +513,12 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
       border-color: ${settings.gridLineColor || "#E2E8F0"} !important;
       padding: ${settings.tablePadding || "10px 14px"} !important;
       font-size: ${settings.fontSize || "13px"} !important;
+      font-family: ${settings.tableFont || "var(--font-mono)"} !important;
+    }
+
+    table th :where(span, div, button, input, select, option, label, p),
+    table td :where(span, div, button, input, select, option, label, p) {
+      font-family: ${settings.tableFont || "var(--font-mono)"} !important;
     }
 
     table th, 
@@ -593,48 +623,31 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
 
   if (settings.customRules && Array.isArray(settings.customRules)) {
     settings.customRules.forEach((rule) => {
-      if (!rule.selector) return;
+      if (!isSafeCustomSelector(rule.selector)) return;
       css += `
         ${rule.selector} {
-          ${rule.radius ? `border-radius: ${rule.radius} !important;` : ""}
+          ${rule.radius ? `border-radius: ${normalizeCssLength(rule.radius)} !important;` : ""}
           ${rule.bg ? `background-color: ${rule.bg} !important;` : ""}
-          ${rule.color ? `color: ${rule.color} !important; stroke: ${rule.color} !important; fill: currentColor !important;` : ""}
+          ${rule.color ? `color: ${rule.color} !important;` : ""}
           ${rule.border ? `border: ${rule.border} !important;` : ""}
           ${rule.borderColor ? `border-color: ${rule.borderColor} !important;` : ""}
-          ${rule.borderWidth ? `border-width: ${rule.borderWidth} !important;` : ""}
+          ${rule.borderWidth ? `border-width: ${normalizeCssLength(rule.borderWidth)} !important;` : ""}
           ${rule.padding ? `padding: ${rule.padding} !important;` : ""}
           ${rule.paddingTop ? `padding-top: ${rule.paddingTop} !important;` : ""}
           ${rule.paddingBottom ? `padding-bottom: ${rule.paddingBottom} !important;` : ""}
           ${rule.paddingLeft ? `padding-left: ${rule.paddingLeft} !important;` : ""}
           ${rule.paddingRight ? `padding-right: ${rule.paddingRight} !important;` : ""}
           ${rule.margin ? `margin: ${rule.margin} !important;` : ""}
-          ${rule.width ? `width: ${rule.width} !important;` : ""}
-          ${rule.height ? `height: ${rule.height} !important;` : ""}
-          ${rule.fontSize ? `font-size: ${rule.fontSize} !important;` : ""}
-        }
-        ${rule.selector} svg, 
-        ${rule.selector} .lucide, 
-        ${rule.selector} button, 
-        ${rule.selector} i, 
-        ${rule.selector} span,
-        ${rule.selector} p,
-        ${rule.selector} div,
-        ${rule.selector} input,
-        ${rule.selector} label,
-        ${rule.selector} th,
-        ${rule.selector} td {
-          ${rule.color ? `color: ${rule.color} !important; stroke: ${rule.color} !important;` : ""}
-          ${rule.fontSize ? `font-size: ${rule.fontSize} !important;` : ""}
-        }
-        ${rule.selector} svg, ${rule.selector} .lucide {
-          ${rule.fontSize ? `width: ${rule.fontSize} !important; height: ${rule.fontSize} !important;` : ""}
+          ${rule.width ? `width: ${normalizeCssLength(rule.width)} !important;` : ""}
+          ${rule.height ? `height: ${normalizeCssLength(rule.height)} !important;` : ""}
+          ${rule.fontSize ? `font-size: ${normalizeCssLength(rule.fontSize)} !important;` : ""}
         }
       `;
     });
   }
 
   // Inject preview rule if provided (for live feedback)
-  if (previewRule && previewRule.selector) {
+  if (previewRule && isSafeCustomSelector(previewRule.selector)) {
     const toPx = (val: string) => {
       if (!val) return "";
       if (/^\d+(\.\d+)?$/.test(val.trim())) return `${val.trim()}px`;
@@ -645,7 +658,7 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
       ${previewRule.selector} {
         ${previewRule.radius ? `border-radius: ${toPx(previewRule.radius)} !important;` : ""}
         ${previewRule.bg ? `background-color: ${previewRule.bg} !important;` : ""}
-        ${previewRule.color ? `color: ${previewRule.color} !important; stroke: ${previewRule.color} !important; fill: currentColor !important;` : ""}
+        ${previewRule.color ? `color: ${previewRule.color} !important;` : ""}
         ${previewRule.border ? `border: ${previewRule.border} !important;` : ""}
         ${previewRule.borderColor ? `border-color: ${previewRule.borderColor} !important;` : ""}
         ${previewRule.borderWidth ? `border-width: ${toPx(previewRule.borderWidth)} !important;` : ""}
@@ -659,29 +672,9 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
         ${previewRule.height ? `height: ${toPx(previewRule.height)} !important;` : ""}
         ${previewRule.fontSize ? `font-size: ${toPx(previewRule.fontSize)} !important;` : ""}
         
-        /* Focus highlight for the selected/focused element as requested */
-        outline: 3px solid #3b82f6 !important;
+        /* Preview uses paint-only properties so it cannot move other DIVs. */
+        outline: 3px solid var(--primary, #3b82f6) !important;
         outline-offset: -3px !important;
-        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.45) !important;
-        position: relative !important;
-        z-index: 50 !important;
-      }
-      ${previewRule.selector} svg, 
-      ${previewRule.selector} .lucide, 
-      ${previewRule.selector} button, 
-      ${previewRule.selector} i, 
-      ${previewRule.selector} span,
-      ${previewRule.selector} p,
-      ${previewRule.selector} div,
-      ${previewRule.selector} input,
-      ${previewRule.selector} label,
-      ${previewRule.selector} th,
-      ${previewRule.selector} td {
-        ${previewRule.color ? `color: ${previewRule.color} !important; stroke: ${previewRule.color} !important;` : ""}
-        ${previewRule.fontSize ? `font-size: ${toPx(previewRule.fontSize)} !important;` : ""}
-      }
-      ${previewRule.selector} svg, ${previewRule.selector} .lucide {
-        ${previewRule.fontSize ? `width: ${toPx(previewRule.fontSize)} !important; height: ${toPx(previewRule.fontSize)} !important;` : ""}
       }
     `;
   }
@@ -721,7 +714,7 @@ export async function loadUiSettings(): Promise<UiSettings> {
     } else {
       // Filter out any leaked un-scoped rules that distort Timesheet, Audit, Balance
       result.customRules = result.customRules.filter((r) => {
-        if (!r || !r.selector) return false;
+        if (!r || !isSafeCustomSelector(r.selector)) return false;
         const sel = r.selector.trim();
         if (
           sel === ".table-container > div.min-h-0" ||

@@ -138,6 +138,7 @@ interface DataTableProps {
   rowHeight?: number;
   style?: React.CSSProperties;
   onFilteredDataChange?: (data: any[]) => void;
+  autoHideZeroSumColumns?: boolean;
 }
 
 const isIdColumnKey = (k: string): boolean => {
@@ -155,7 +156,16 @@ const isIdColumnKey = (k: string): boolean => {
     lower === "document id" ||
     lower === "id issuance date" ||
     lower === "id issuance" ||
-    lower.includes("id") ||
+    lower.includes("employee id") ||
+    lower.includes("employee_id") ||
+    lower.includes("employeeid") ||
+    lower.includes("document id") ||
+    lower.includes("national id") ||
+    lower.includes("citizen id") ||
+    lower.startsWith("id_") ||
+    lower.startsWith("id ") ||
+    lower.endsWith("_id") ||
+    lower.endsWith(" id") ||
     lower.includes("mã ae") ||
     lower.includes("mã nv")
   );
@@ -516,7 +526,7 @@ const DataRow = React.memo(
               className={`${col.cellClassName?.includes("whitespace-pre-wrap") ? "" : "whitespace-nowrap"} select-none ${getAlignment(col)} relative 
               ${isInRange ? "bg-accent/20 z-10" : ""} 
               ${isActive ? "bg-accent/15 z-10 font-medium" : ""} 
-              text-[1em] leading-[1.7] font-normal text-[#4A3E3E] border-b border-r border-[var(--grid-line-color,#E2E8F0)] ${col.cellClassName || ""}
+              text-[1em] leading-[1.7] font-normal text-foreground border-b border-r border-[var(--grid-line-color,#E2E8F0)] ${col.cellClassName || ""}
             `}
               style={{
                 padding: "var(--table-padding, 0.65rem 1rem)",
@@ -598,9 +608,6 @@ const DataRow = React.memo(
                   <span className={`relative z-0 ${col.cellClassName?.includes("whitespace-pre-wrap") ? "" : "truncate"}`}>
                     {col.render ? col.render(row[col.key], row) : formatValue(row[col.key], col.type, col.key)}
                   </span>
-                  {isEditable && !isActive && !isInRange && (
-                    <Type className="w-3 h-3 text-primary/0 shrink-0 ml-2" />
-                  )}
                 </div>
               )}
             </td>
@@ -688,6 +695,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       resizableColumns = true,
       style: customStyle,
       onFilteredDataChange,
+      autoHideZeroSumColumns = true,
     },
     ref,
   ) => {
@@ -828,6 +836,12 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       });
       return hidden;
     });
+    const [autoHiddenColumns, setAutoHiddenColumns] = useState<Set<string>>(
+      () => new Set(),
+    );
+    const [shownAutoHiddenColumns, setShownAutoHiddenColumns] = useState<Set<string>>(
+      () => new Set(),
+    );
     const [rowDensity, setRowDensity] = useState<
       "compact" | "normal" | "relaxed"
     >("normal");
@@ -1072,9 +1086,17 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         localStorage.setItem(`dt_widths_${storageKey}`, JSON.stringify(widths));
     };
 
+    const effectiveHiddenColumns = useMemo(() => {
+      const next = new Set(hiddenColumns);
+      autoHiddenColumns.forEach((key) => {
+        if (!shownAutoHiddenColumns.has(key)) next.add(key);
+      });
+      return next;
+    }, [hiddenColumns, autoHiddenColumns, shownAutoHiddenColumns]);
+
     const visibleColumns = useMemo(
-      () => columns.filter((col) => isIdColumnKey(col.key) || !hiddenColumns.has(col.key)),
-      [columns, hiddenColumns],
+      () => columns.filter((col) => isIdColumnKey(col.key) || !effectiveHiddenColumns.has(col.key)),
+      [columns, effectiveHiddenColumns],
     );
 
     const filteredAndSortedData = useMemo(() => {
@@ -1157,6 +1179,62 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
 
       return result;
     }, [data, sortConfig, columnFilters, debouncedSearchTerm, supabaseTableName, supabaseData, columns, debouncedColumnFilters]);
+
+    const footerTotals = useMemo(() => {
+      const totals: Record<string, number | null> = {};
+      columns.forEach((col) => {
+        const effectiveType = columnTypes[col.key] || col.type;
+        const isNumeric =
+          effectiveType === "number" ||
+          effectiveType === "currency" ||
+          effectiveType === "money";
+        if (!isNumeric || isIdColumnKey(col.key)) {
+          totals[col.key] = null;
+          return;
+        }
+
+        totals[col.key] = filteredAndSortedData.reduce((sum, row) => {
+          if (row._dimmed) return sum;
+          const status = String(row["Trạng thái"] || "").toUpperCase();
+          const operation = String(row["Nghiệp vụ"] || "").toUpperCase();
+          if (status.includes("CANCEL") || operation.includes("CANCEL")) return sum;
+          return sum + (parseMoneyToNumber(row[col.key]) || 0);
+        }, 0);
+      });
+      return totals;
+    }, [columns, columnTypes, filteredAndSortedData]);
+
+    useEffect(() => {
+      const next = new Set<string>();
+      if (
+        autoHideZeroSumColumns &&
+        showFooter &&
+        filteredAndSortedData.length > 0
+      ) {
+        columns.forEach((col) => {
+          const total = footerTotals[col.key];
+          if (typeof total === "number" && Math.abs(total) < 1e-9) {
+            next.add(col.key);
+          }
+        });
+      }
+
+      setAutoHiddenColumns((prev) => {
+        if (
+          prev.size === next.size &&
+          Array.from(prev).every((key) => next.has(key))
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    }, [
+      autoHideZeroSumColumns,
+      showFooter,
+      filteredAndSortedData.length,
+      columns,
+      footerTotals,
+    ]);
 
     const activeFilters = useMemo(() => {
       return Object.entries(columnFilters)
@@ -1446,7 +1524,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         const nextWidths = { ...columnWidths };
 
         columns.forEach((col) => {
-          if (hiddenColumns.has(col.key)) return;
+          if (effectiveHiddenColumns.has(col.key)) return;
 
           context.font = "700 0.8125rem Inter, sans-serif"; // Matches table cell font
           let maxWidth = context.measureText(col.label || "").width + 80;
@@ -1536,6 +1614,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         localStorage.removeItem(`dt_sort_${storageKey}`);
         localStorage.removeItem(`dt_ipp_${storageKey}`);
         setHiddenColumns(new Set());
+        setShownAutoHiddenColumns(new Set());
         setColumnWidths({});
         setSortConfig(null);
         setItemsPerPage(50);
@@ -1545,15 +1624,31 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
     };
 
     const toggleColumn = (key: string) => {
-      setHiddenColumns((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) {
+      const isCurrentlyHidden = effectiveHiddenColumns.has(key);
+
+      if (isCurrentlyHidden) {
+        setHiddenColumns((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
           next.delete(key);
-        } else {
-          next.add(key);
+          return next;
+        });
+        if (autoHiddenColumns.has(key)) {
+          setShownAutoHiddenColumns((prev) => new Set(prev).add(key));
         }
-        return next;
-      });
+        return;
+      }
+
+      if (autoHiddenColumns.has(key)) {
+        setShownAutoHiddenColumns((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        return;
+      }
+
+      setHiddenColumns((prev) => new Set(prev).add(key));
     };
 
     const updateAlignment = (
@@ -1578,7 +1673,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
 
     React.useImperativeHandle(ref, () => ({
       columns,
-      hiddenColumns,
+      hiddenColumns: effectiveHiddenColumns,
       toggleColumn,
       resetTableConfig,
       clearAllFilters,
@@ -1648,7 +1743,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
           if (context) {
             const nextWidths: Record<string, number> = {};
             columns.forEach((col) => {
-              if (hiddenColumns.has(col.key)) return;
+              if (effectiveHiddenColumns.has(col.key)) return;
 
               context.font = "700 0.7rem Inter, sans-serif";
               let maxWidth = context.measureText(col.label || "").width + 45;
@@ -1671,7 +1766,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
           }
         }
       }
-    }, [filteredAndSortedData, columns, storageKey, hiddenColumns]);
+    }, [filteredAndSortedData, columns, storageKey, effectiveHiddenColumns]);
 
     const getAlignment = (col: Column) => {
       const type = col.type;
@@ -2745,22 +2840,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                       />
                     )}
                     {visibleColumns.map((col: any, cIdx: number) => {
-                      const isNumeric =
-                        col.type === "number" ||
-                        col.type === "currency" ||
-                        col.type === "money";
-                      const grandTotal = isNumeric
-                        ? filteredAndSortedData.reduce(
-                            (sum, row) => {
-                              if (row._dimmed) return sum;
-                              const st = String(row["Trạng thái"] || "").toUpperCase();
-                              const nv = String(row["Nghiệp vụ"] || "").toUpperCase();
-                              if (st.includes("CANCEL") || nv.includes("CANCEL")) return sum;
-                              return sum + (parseMoneyToNumber(row[col.key]) || 0);
-                            },
-                            0,
-                          )
-                        : null;
+                      const grandTotal = footerTotals[col.key];
 
                       const colWidth = columnWidths[col.key] || col.width;
                       const widthStyle = colWidth
@@ -2903,17 +2983,23 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.preventDefault();
-                        const allVisible = hiddenColumns.size === 0;
+                        const allVisible = columns.every(
+                          (col) =>
+                            isIdColumnKey(col.key) ||
+                            !effectiveHiddenColumns.has(col.key),
+                        );
                         if (allVisible) {
                           setHiddenColumns(new Set(columns.map((c) => c.key)));
+                          setShownAutoHiddenColumns(new Set());
                         } else {
                           setHiddenColumns(new Set());
+                          setShownAutoHiddenColumns(new Set(autoHiddenColumns));
                         }
                       }}
                       className="flex items-center justify-between text-xs font-bold cursor-pointer text-primary"
                     >
-                      <span>{hiddenColumns.size === 0 ? "Ẩn tất cả" : "Chọn tất cả"}</span>
-                      {hiddenColumns.size === 0 ? (
+                      <span>{columns.every((col) => isIdColumnKey(col.key) || !effectiveHiddenColumns.has(col.key)) ? "Ẩn tất cả" : "Chọn tất cả"}</span>
+                      {columns.every((col) => isIdColumnKey(col.key) || !effectiveHiddenColumns.has(col.key)) ? (
                         <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
                       ) : (
                         <EyeOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />
@@ -2929,8 +3015,15 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                         }}
                         className="flex items-center justify-between text-xs cursor-pointer"
                       >
-                        <span className="truncate pr-2">{col.label}</span>
-                        {!hiddenColumns.has(col.key) ? (
+                        <span className="flex min-w-0 items-center gap-2 pr-2">
+                          <span className="truncate">{col.label}</span>
+                          {autoHiddenColumns.has(col.key) && (
+                            <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+                              Tổng = 0
+                            </span>
+                          )}
+                        </span>
+                        {!effectiveHiddenColumns.has(col.key) || isIdColumnKey(col.key) ? (
                           <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
                         ) : (
                           <EyeOff className="w-3.5 h-3.5 text-slate-300 shrink-0" />

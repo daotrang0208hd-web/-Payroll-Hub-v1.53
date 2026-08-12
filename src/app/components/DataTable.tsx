@@ -674,7 +674,7 @@ const DataRow = React.memo(
               className={`${col.cellClassName?.includes("whitespace-pre-wrap") ? "" : "whitespace-nowrap"} select-none ${getAlignment(col)} relative 
               ${isInRange ? "bg-accent/20 z-10" : ""} 
               ${isActive ? "bg-accent/15 z-10 font-medium" : ""} 
-              text-[1em] leading-[1.7] font-normal text-[#4A3E3E] border-b border-r ${borderClass || "border-[#e7dbdc]"} ${col.cellClassName || ""}
+              text-[1em] leading-[1.7] font-normal text-foreground border-b border-r ${borderClass || "border-[var(--grid-line-color,var(--border,#e7dbdc))]"} ${col.cellClassName || ""}
               ${stickyFirstColumn && cIdx === 0 ? "sticky-col-first-data" : ""}
             `}
               style={{
@@ -760,9 +760,6 @@ const DataRow = React.memo(
                   <span className={`relative z-0 ${col.cellClassName?.includes("whitespace-pre-wrap") ? "" : "truncate"}`}>
                     {col.render ? col.render(row[col.key], row) : formatValue(row[col.key], col.type, col.key)}
                   </span>
-                  {isEditable && !isActive && !isInRange && (
-                    <Type className="w-3 h-3 text-primary/0 shrink-0 ml-2" />
-                  )}
                 </div>
               )}
             </td>
@@ -863,7 +860,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       style: customStyle,
       onFilteredDataChange,
       onColumnFiltersChange,
-      autoHideZeroSumColumns = false,
+      autoHideZeroSumColumns = true,
       stickyHeader = true,
       borderless = false,
       stickyFirstColumn: _requestedStickyFirstColumn = false,
@@ -918,11 +915,11 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
     const borderClass = borderless ? "border-transparent" : getBorderClass(headerClassName);
     const getBorderColorHex = (headerClass?: string) => {
       if (borderless) return "transparent";
-      if (!headerClass) return "#E2E8F0";
-      if (headerClass.includes("border-accent")) return "rgba(var(--accent), 0.2)";
+      if (!headerClass) return "var(--grid-line-color, var(--border, #E2E8F0))";
+      if (headerClass.includes("border-accent")) return "color-mix(in srgb, var(--accent) 20%, transparent)";
       if (headerClass.includes("border-indigo")) return "rgba(99, 102, 241, 0.2)";
       if (headerClass.includes("border-pink")) return "rgba(244, 63, 94, 0.2)";
-      return "#E2E8F0";
+      return "var(--grid-line-color, var(--border, #E2E8F0))";
     };
     const borderColorHex = getBorderColorHex(headerClassName);
     const setSearchTerm = onExternalSearchChange || setInternalSearchTerm;
@@ -993,6 +990,16 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       });
       return hidden;
     });
+    // Auto-hidden columns are intentionally kept separate from the user's
+    // persisted visibility choices. This lets a zero-total column disappear by
+    // default without deleting it from the column menu or keeping it hidden
+    // after its data becomes non-zero.
+    const [autoHiddenColumns, setAutoHiddenColumns] = useState<Set<string>>(
+      () => new Set(),
+    );
+    const [shownAutoHiddenColumns, setShownAutoHiddenColumns] = useState<Set<string>>(
+      () => new Set(),
+    );
     const [rowDensity, setRowDensity] = useState<
       "compact" | "normal" | "relaxed"
     >("normal");
@@ -1357,47 +1364,13 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         localStorage.setItem(`dt_widths_${storageKey}`, JSON.stringify(widths));
     };
 
-    const lastDataLengthRef = useRef<number>(-1);
-
-    useEffect(() => {
-      if (autoHideZeroSumColumns && data && data.length > 0 && data.length !== lastDataLengthRef.current) {
-        lastDataLengthRef.current = data.length;
-        
-        const zeroCols = new Set<string>();
-        columns.forEach(col => {
-          if (col.type === "currency" || col.type === "number" || col.type === "money") {
-            let sum = 0;
-            for (const row of data) {
-              if (totalCalculationOverride) {
-                const override = totalCalculationOverride(row, col.key);
-                if (override !== null) {
-                  sum += override;
-                  continue;
-                }
-              }
-              const val = row[col.key];
-              if (typeof val === 'number') {
-                sum += val;
-              } else if (typeof val === 'string') {
-                const num = parseMoneyToNumber(val);
-                if (!isNaN(num)) sum += num;
-              }
-            }
-            if (sum === 0) {
-              zeroCols.add(col.key);
-            }
-          }
-        });
-        
-        if (zeroCols.size > 0) {
-          setHiddenColumns(prev => {
-            const next = new Set(prev);
-            zeroCols.forEach(k => next.add(k));
-            return next;
-          });
-        }
-      }
-    }, [data, columns, autoHideZeroSumColumns, totalCalculationOverride]);
+    const effectiveHiddenColumns = useMemo(() => {
+      const next = new Set(hiddenColumns);
+      autoHiddenColumns.forEach((key) => {
+        if (!shownAutoHiddenColumns.has(key)) next.add(key);
+      });
+      return next;
+    }, [hiddenColumns, autoHiddenColumns, shownAutoHiddenColumns]);
 
     const noColKey = useMemo(() => {
       const found = columns.find((c: any) => isNoCol(c.key) || isNoCol(c.label));
@@ -1405,8 +1378,8 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
     }, [columns]);
 
     const isRowNumberVisible = useMemo(() => {
-      return !!showRowNumber && !hiddenColumns.has(noColKey) && !hiddenColumns.has("__ROW_NUMBER__");
-    }, [showRowNumber, hiddenColumns, noColKey]);
+      return !!showRowNumber && !effectiveHiddenColumns.has(noColKey) && !effectiveHiddenColumns.has("__ROW_NUMBER__");
+    }, [showRowNumber, effectiveHiddenColumns, noColKey]);
 
     const visibleColumns = useMemo(
       () =>
@@ -1414,10 +1387,10 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
           (col) =>
             !isInternalHelperCol(col.key) &&
             !isInternalHelperCol(col.label) &&
-            !hiddenColumns.has(col.key) &&
+            !effectiveHiddenColumns.has(col.key) &&
             !(showRowNumber && (isNoCol(col.key) || isNoCol(col.label)))
         ),
-      [columns, hiddenColumns, showRowNumber],
+      [columns, effectiveHiddenColumns, showRowNumber],
     );
 
     const allDropdownColumns = useMemo(() => {
@@ -1686,6 +1659,38 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       });
       return totals;
     }, [filteredAndSortedData, columns, columnTypes, showFooter, totalCalculationOverride]);
+
+    useEffect(() => {
+      const next = new Set<string>();
+      if (
+        autoHideZeroSumColumns &&
+        showFooter &&
+        filteredAndSortedData.length > 0
+      ) {
+        columns.forEach((col) => {
+          const total = footerTotals[col.key];
+          if (typeof total === "number" && Math.abs(total) < 1e-9) {
+            next.add(col.key);
+          }
+        });
+      }
+
+      setAutoHiddenColumns((prev) => {
+        if (
+          prev.size === next.size &&
+          Array.from(prev).every((key) => next.has(key))
+        ) {
+          return prev;
+        }
+        return next;
+      });
+    }, [
+      autoHideZeroSumColumns,
+      showFooter,
+      filteredAndSortedData.length,
+      columns,
+      footerTotals,
+    ]);
 
     const columnTotals = useMemo(() => {
       const totals: Record<string, number> = {};
@@ -2026,6 +2031,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
           }
         });
         setHiddenColumns(defaultHidden);
+        setShownAutoHiddenColumns(new Set());
         setColumnWidths({});
         setSortConfig(null);
         setItemsPerPage(50);
@@ -2035,15 +2041,31 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
     };
 
     const toggleColumn = (key: string) => {
-      setHiddenColumns((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) {
+      const isCurrentlyHidden = effectiveHiddenColumns.has(key);
+
+      if (isCurrentlyHidden) {
+        setHiddenColumns((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
           next.delete(key);
-        } else {
-          next.add(key);
+          return next;
+        });
+        if (autoHiddenColumns.has(key)) {
+          setShownAutoHiddenColumns((prev) => new Set(prev).add(key));
         }
-        return next;
-      });
+        return;
+      }
+
+      if (autoHiddenColumns.has(key)) {
+        setShownAutoHiddenColumns((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        return;
+      }
+
+      setHiddenColumns((prev) => new Set(prev).add(key));
     };
 
     const updateAlignment = (
@@ -2068,7 +2090,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
 
     React.useImperativeHandle(ref, () => ({
       columns,
-      hiddenColumns,
+      hiddenColumns: effectiveHiddenColumns,
       toggleColumn,
       resetTableConfig,
       clearAllFilters,
@@ -3478,17 +3500,19 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                   <DropdownMenuItem
                     onClick={(e) => {
                       e.preventDefault();
-                      const allVisible = allDropdownColumns.every((c) => !hiddenColumns.has(c.key));
+                      const allVisible = allDropdownColumns.every((c) => !effectiveHiddenColumns.has(c.key));
                       if (allVisible) {
                         setHiddenColumns(new Set(allDropdownColumns.map((c) => c.key)));
+                        setShownAutoHiddenColumns(new Set());
                       } else {
                         setHiddenColumns(new Set());
+                        setShownAutoHiddenColumns(new Set(autoHiddenColumns));
                       }
                     }}
                     className="flex items-center justify-between text-xs font-bold cursor-pointer text-primary py-1.5 px-2 rounded-lg hover:bg-primary/5"
                   >
-                    <span>{allDropdownColumns.every((c) => !hiddenColumns.has(c.key)) ? "Ẩn tất cả" : "Hiển thị tất cả"}</span>
-                    {allDropdownColumns.every((c) => !hiddenColumns.has(c.key)) ? (
+                    <span>{allDropdownColumns.every((c) => !effectiveHiddenColumns.has(c.key)) ? "Ẩn tất cả" : "Hiển thị tất cả"}</span>
+                    {allDropdownColumns.every((c) => !effectiveHiddenColumns.has(c.key)) ? (
                       <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
                     ) : (
                       <EyeOff className="w-3.5 h-3.5 text-foreground/40 shrink-0" />
@@ -3504,8 +3528,15 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                       }}
                       className="flex items-center justify-between text-xs cursor-pointer py-1.5 px-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
-                      <span className="truncate pr-2 font-medium">{col.label}</span>
-                      {!hiddenColumns.has(col.key) ? (
+                      <span className="flex min-w-0 items-center gap-2 pr-2">
+                        <span className="truncate font-medium">{col.label}</span>
+                        {autoHiddenColumns.has(col.key) && (
+                          <span className="shrink-0 text-[9px] font-bold uppercase tracking-wide text-muted-foreground">
+                            Tổng = 0
+                          </span>
+                        )}
+                      </span>
+                      {!effectiveHiddenColumns.has(col.key) ? (
                         <Eye className="w-3.5 h-3.5 text-primary shrink-0" />
                       ) : (
                         <EyeOff className="w-3.5 h-3.5 text-foreground/40 shrink-0" />

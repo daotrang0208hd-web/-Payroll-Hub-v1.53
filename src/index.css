@@ -1313,7 +1313,7 @@ div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-
 .table-container > div.min-h-0 {
   background-color: transparent !important;
   background: transparent !important;
-  border: 1px solid #e2e8f0 !important;
+  border: 1px solid var(--grid-line-color, var(--border, #e2e8f0)) !important;
 }
 
 /* Remove nested table-body spacing in every Bulk Payment card state. */

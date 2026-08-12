@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { X, Settings2, Trash2, Target, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import localforage from "localforage";
@@ -12,6 +12,8 @@ import {
   applyUiSettings,
   loadUiSettings,
   TASTE_PRESETS,
+  isSafeCustomSelector,
+  normalizeCssLength,
 } from "../lib/ui-settings";
 
 // Helper utilities for parsing CSS shorthand paddings/margins
@@ -54,6 +56,8 @@ export function UiSettingsModal({
   onClose: () => void;
 }) {
   const [settings, setSettings] = useState<UiSettings>(defaultSettings);
+  const persistedSettingsRef = useRef<UiSettings>(defaultSettings);
+  const wasOpenRef = useRef(false);
   const { updateAppData } = useAppData();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [activeModalTab, setActiveModalTab] = useState<"general" | "div_selector">("general");
@@ -127,30 +131,25 @@ export function UiSettingsModal({
     setMarLeft(cleanUnit(parsed.left));
   }, []);
 
-  const handleSelectorChange = useCallback((selector: string, targetElement?: HTMLElement) => {
+  const resetCustomRuleFields = useCallback(() => {
+    setNewRadius("");
+    setNewBg("");
+    setNewColor("");
+    setNewBorder("");
+    updatePaddingStates("");
+    updateMarginStates("");
+    setNewWidth("");
+    setNewHeight("");
+    setNewFontSize("");
+  }, [updatePaddingStates, updateMarginStates]);
+
+  const handleSelectorChange = useCallback((selector: string, _targetElement?: HTMLElement) => {
     setNewSelector(selector);
     const cleanSelector = selector.trim();
     if (!cleanSelector) {
-      setNewRadius("");
-      setNewBg("");
-      setNewColor("");
-      setNewBorder("");
-      updatePaddingStates("");
-      updateMarginStates("");
-      setNewWidth("");
-      setNewHeight("");
+      resetCustomRuleFields();
       return;
     }
-
-    const rgbToHex = (rgb: string) => {
-      if (!rgb) return "";
-      const match = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/);
-      if (!match) return rgb;
-      const r = parseInt(match[1]).toString(16).padStart(2, '0');
-      const g = parseInt(match[2]).toString(16).padStart(2, '0');
-      const b = parseInt(match[3]).toString(16).padStart(2, '0');
-      return `#${r}${g}${b}`;
-    };
 
     const existingRule = settings.customRules?.find(
       (r) => r.selector === cleanSelector
@@ -166,127 +165,12 @@ export function UiSettingsModal({
       setNewHeight(existingRule.height || "");
       setNewFontSize(existingRule.fontSize || "");
     } else {
-      // Try to find the element and inspect its computed styles
-      const el = targetElement || (() => {
-        try {
-          return document.querySelector(cleanSelector) as HTMLElement;
-        } catch (e) {
-          return null;
-        }
-      })();
-
-      if (el) {
-        try {
-          const computed = window.getComputedStyle(el);
-          
-          const getCleanBg = () => {
-            const bgVal = computed.backgroundColor;
-            if (bgVal && bgVal !== "rgba(0, 0, 0, 0)" && bgVal !== "transparent") {
-              return rgbToHex(bgVal);
-            }
-            return "";
-          };
-
-          const getCleanBorder = () => {
-            const w = computed.borderWidth;
-            const s = computed.borderStyle;
-            const c = computed.borderColor;
-            if (w && w !== "0px" && s && s !== "none") {
-              return `${cleanUnit(w)}px ${s} ${rgbToHex(c)}`;
-            }
-            return "";
-          };
-
-          const getCleanPadding = () => {
-            const pt = computed.paddingTop;
-            const pr = computed.paddingRight;
-            const pb = computed.paddingBottom;
-            const pl = computed.paddingLeft;
-            if (pt !== "0px" || pr !== "0px" || pb !== "0px" || pl !== "0px") {
-              if (pt === pr && pr === pb && pb === pl) return cleanUnit(pt);
-              return `${cleanUnit(pt)} ${cleanUnit(pr)} ${cleanUnit(pb)} ${cleanUnit(pl)}`;
-            }
-            return "";
-          };
-
-          const getCleanMargin = () => {
-            const mt = computed.marginTop;
-            const mr = computed.marginRight;
-            const mb = computed.marginBottom;
-            const ml = computed.marginLeft;
-            if (mt !== "0px" || mr !== "0px" || mb !== "0px" || ml !== "0px") {
-              if (mt === mr && mr === mb && mb === ml) return cleanUnit(mt);
-              return `${cleanUnit(mt)} ${cleanUnit(mr)} ${cleanUnit(mb)} ${cleanUnit(ml)}`;
-            }
-            return "";
-          };
-
-          const getCleanRadius = () => {
-            const r = computed.borderRadius;
-            if (r) return cleanUnit(r);
-            return "";
-          };
-
-          const getCleanWidth = () => {
-            const w = computed.width;
-            if (w && w !== "auto" && w !== "0px") return cleanUnit(w);
-            return "";
-          };
-
-          const getCleanHeight = () => {
-            const h = computed.height;
-            if (h && h !== "auto" && h !== "0px") return cleanUnit(h);
-            return "";
-          };
-
-          const getCleanFontSize = () => {
-            const fs = computed.fontSize;
-            if (fs) return cleanUnit(fs);
-            return "";
-          };
-
-          setNewRadius(getCleanRadius());
-          setNewBg(getCleanBg());
-          
-          // Only pre-populate color if it has some non-default visible value
-          const textCol = computed.color;
-          if (textCol && textCol !== "rgba(0, 0, 0, 0)" && textCol !== "transparent") {
-            setNewColor(rgbToHex(textCol));
-          } else {
-            setNewColor("");
-          }
-          
-          setNewBorder(getCleanBorder());
-          updatePaddingStates(getCleanPadding());
-          updateMarginStates(getCleanMargin());
-          setNewWidth(getCleanWidth());
-          setNewHeight(getCleanHeight());
-          setNewFontSize(getCleanFontSize());
-        } catch (err) {
-          console.error("Error computing styles for element:", err);
-          setNewRadius("");
-          setNewBg("");
-          setNewColor("");
-          setNewBorder("");
-          updatePaddingStates("");
-          updateMarginStates("");
-          setNewWidth("");
-          setNewHeight("");
-          setNewFontSize("");
-        }
-      } else {
-        setNewRadius("");
-        setNewBg("");
-        setNewColor("");
-        setNewBorder("");
-        updatePaddingStates("");
-        updateMarginStates("");
-        setNewWidth("");
-        setNewHeight("");
-        setNewFontSize("");
-      }
+      // A new selection starts with no overrides. Copying computed width,
+      // height, spacing and typography into a rule would freeze the current
+      // layout even when the user only intended to change one property.
+      resetCustomRuleFields();
     }
-  }, [settings.customRules, updatePaddingStates, updateMarginStates]);
+  }, [settings.customRules, resetCustomRuleFields, updatePaddingStates, updateMarginStates]);
 
   // State and effect for element inspector mode
   const [isInspecting, setIsInspecting] = useState(false);
@@ -329,8 +213,13 @@ export function UiSettingsModal({
     };
 
     const getReadableSelector = (el: HTMLElement): string => {
+      const escapeIdentifier = (value: string) =>
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(value)
+          : value.replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+
       if (el.id) {
-        return `#${el.id}`;
+        return `#${escapeIdentifier(el.id)}`;
       }
 
       // List of highly unique/semantic classes that we can return directly if matched
@@ -355,7 +244,10 @@ export function UiSettingsModal({
       ];
 
       for (const cls of knownUniqueClasses) {
-        if (el.classList.contains(cls)) {
+        if (
+          el.classList.contains(cls) &&
+          document.querySelectorAll(`.${escapeIdentifier(cls)}`).length === 1
+        ) {
           return `.${cls}`;
         }
       }
@@ -365,13 +257,16 @@ export function UiSettingsModal({
 
       while (current && current !== document.body) {
         if (current.id) {
-          path.unshift(`#${current.id}`);
+          path.unshift(`#${escapeIdentifier(current.id)}`);
           break;
         }
 
         let foundUniqueParent = false;
         for (const cls of knownUniqueClasses) {
-          if (current.classList.contains(cls)) {
+          if (
+            current.classList.contains(cls) &&
+            document.querySelectorAll(`.${escapeIdentifier(cls)}`).length === 1
+          ) {
             path.unshift(`.${cls}`);
             foundUniqueParent = true;
             break;
@@ -382,7 +277,15 @@ export function UiSettingsModal({
         }
 
         const tag = current.tagName.toLowerCase();
-        if (tag === "main" || tag === "header" || tag === "nav" || tag === "table" || tag === "thead" || tag === "tbody") {
+        if (
+          (tag === "main" ||
+            tag === "header" ||
+            tag === "nav" ||
+            tag === "table" ||
+            tag === "thead" ||
+            tag === "tbody") &&
+          document.querySelectorAll(tag).length === 1
+        ) {
           path.unshift(tag);
           break;
         }
@@ -422,7 +325,17 @@ export function UiSettingsModal({
 
         let segment = tag;
         if (safeClasses.length > 0) {
-          segment += `.${safeClasses[0]}`;
+          segment += `.${escapeIdentifier(safeClasses[0])}`;
+        }
+
+        const parent = current.parentElement;
+        if (parent) {
+          const sameTagSiblings = Array.from(parent.children).filter(
+            (child) => child.tagName === current!.tagName,
+          );
+          if (sameTagSiblings.length > 1) {
+            segment += `:nth-of-type(${sameTagSiblings.indexOf(current) + 1})`;
+          }
         }
 
         path.unshift(segment);
@@ -479,21 +392,65 @@ export function UiSettingsModal({
       return;
     }
     const cleanSelector = newSelector.trim();
+    if (!isSafeCustomSelector(cleanSelector)) {
+      toast.error("CSS selector không hợp lệ. Vui lòng chọn lại phần tử.");
+      return;
+    }
+
+    const normalizedRadius = normalizeCssLength(newRadius);
+    const normalizedWidth = normalizeCssLength(newWidth);
+    const normalizedHeight = normalizeCssLength(newHeight);
+    const normalizedFontSize = normalizeCssLength(newFontSize);
+    const padding = getCombinedPadding() || undefined;
+    const margin = getCombinedMargin() || undefined;
+    const hasOverride = Boolean(
+      normalizedRadius ||
+      newBg.trim() ||
+      newColor.trim() ||
+      newBorder.trim() ||
+      padding ||
+      margin ||
+      normalizedWidth ||
+      normalizedHeight ||
+      normalizedFontSize,
+    );
+    if (!hasOverride) {
+      toast.error("Hãy nhập ít nhất một thuộc tính cần thay đổi.");
+      return;
+    }
+
+    const supports = (property: string, value?: string) =>
+      !value || typeof CSS === "undefined" || CSS.supports(property, value);
+    if (
+      !supports("border-radius", normalizedRadius) ||
+      !supports("background-color", newBg.trim()) ||
+      !supports("color", newColor.trim()) ||
+      !supports("border", newBorder.trim()) ||
+      !supports("padding", padding) ||
+      !supports("margin", margin) ||
+      !supports("width", normalizedWidth) ||
+      !supports("height", normalizedHeight) ||
+      !supports("font-size", normalizedFontSize)
+    ) {
+      toast.error("Có giá trị CSS không hợp lệ. Vui lòng kiểm tra lại đơn vị hoặc màu.");
+      return;
+    }
+
     const existingRules = settings.customRules || [];
     const index = existingRules.findIndex((r) => r.selector === cleanSelector);
 
     const newRule = {
       id: index >= 0 ? existingRules[index].id : "rule-" + Date.now(),
       selector: cleanSelector,
-      radius: newRadius.trim() || undefined,
+      radius: normalizedRadius,
       bg: newBg.trim() || undefined,
       color: newColor.trim() || undefined,
       border: newBorder.trim() || undefined,
-      padding: getCombinedPadding() || undefined,
-      margin: getCombinedMargin() || undefined,
-      width: newWidth.trim() || undefined,
-      height: newHeight.trim() || undefined,
-      fontSize: newFontSize.trim() || undefined,
+      padding,
+      margin,
+      width: normalizedWidth,
+      height: normalizedHeight,
+      fontSize: normalizedFontSize,
     };
 
     let updatedRules;
@@ -508,15 +465,7 @@ export function UiSettingsModal({
     
     // Reset form inputs
     setNewSelector("");
-    setNewRadius("");
-    setNewBg("");
-    setNewColor("");
-    setNewBorder("");
-    updatePaddingStates("");
-    updateMarginStates("");
-    setNewWidth("");
-    setNewHeight("");
-    setNewFontSize("");
+    resetCustomRuleFields();
     toast.success(index >= 0 ? "Đã cập nhật style cho selector!" : "Đã thêm style custom cho selector!");
   };
 
@@ -530,6 +479,7 @@ export function UiSettingsModal({
     const loadSettings = async () => {
       try {
         const loaded = await loadUiSettings();
+        persistedSettingsRef.current = loaded;
         setSettings(loaded);
       } catch (e) {
         console.error("Failed to load UI settings", e);
@@ -540,6 +490,19 @@ export function UiSettingsModal({
       loadSettings();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      wasOpenRef.current = true;
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+    setIsInspecting(false);
+    setNewSelector("");
+    resetCustomRuleFields();
+    applyUiSettings(persistedSettingsRef.current);
+  }, [isOpen, resetCustomRuleFields]);
 
   useEffect(() => {
     if (isOpen) {
@@ -562,6 +525,7 @@ export function UiSettingsModal({
   const saveSettings = async () => {
     try {
       await localforage.setItem(UI_SETTINGS_KEY, settings);
+      persistedSettingsRef.current = settings;
       const { bgImage, ...smallSettings } = settings;
       localStorage.setItem(
         UI_SETTINGS_KEY + "_small",
@@ -583,6 +547,7 @@ export function UiSettingsModal({
   const resetSettings = async () => {
     toast.info("Đang reset cài đặt...");
     setSettings(defaultSettings);
+    persistedSettingsRef.current = defaultSettings;
     await localforage.setItem(UI_SETTINGS_KEY, defaultSettings);
     localStorage.setItem(
       UI_SETTINGS_KEY + "_small",
@@ -759,9 +724,12 @@ export function UiSettingsModal({
 
                   {/* Custom Element Selector Styles */}
                   <div className="flex flex-col gap-2 mt-3 border-t border-primary/10 pt-3">
-                    <label className="font-black text-xs text-primary/75 uppercase tracking-wider">
-                      Chỉ định DIV & sửa styles
-                    </label>
+                      <label className="font-black text-xs text-primary/75 uppercase tracking-wider">
+                        Chỉ định DIV & sửa styles
+                      </label>
+                      <p className="text-[10px] font-medium leading-relaxed text-primary/60">
+                        Chỉ nhập thuộc tính muốn đổi. Ô để trống sẽ giữ nguyên định dạng gốc của DIV và các phần tử con.
+                      </p>
                     
                     <div className="flex flex-col gap-2 bg-slate-50 p-3 rounded-lg border border-primary/10 text-xs">
                       {/* Preset selectors quick pick */}
