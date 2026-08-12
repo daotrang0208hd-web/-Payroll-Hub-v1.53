@@ -3067,7 +3067,7 @@ export function BulkPayment({
 
       {/* Right Panel - Data View */}
       <div
-        className="bulk-payment-data-panel master-theme-panel flex-1 border rounded-none flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full"
+        className={`bulk-payment-data-panel master-theme-panel flex-1 border rounded-none flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full ${rightPanelTab !== "visuals" ? "unified-table-frame" : ""}`}
         style={{
           borderRadius: "0px",
           borderWidth: rightPanelTab === "visuals" ? "0px" : "0.5px",
@@ -3082,7 +3082,7 @@ export function BulkPayment({
         {/* ANALYSIS owns its own table header; the shared selector bar is removed. */}
         {rightPanelTab !== "visuals" && (
         <div
-          className="master-panel-header px-3 border-b flex flex-row items-center justify-between w-full gap-3 shrink-0 select-none box-border"
+          className="master-panel-header unified-table-frame-header px-3 flex flex-row items-center justify-between w-full gap-3 shrink-0 select-none box-border"
           style={{
             height: "73px",
             minHeight: "73px",
@@ -3450,7 +3450,7 @@ export function BulkPayment({
                     showFooter={true}
                     hideSearch={true}
                     headerClassName="bg-[var(--table-header-bg,#FAF9F6)] text-slate-800 border-[#e7dbdc] font-bold"
-                    footerClassName="bg-[var(--table-header-bg,#FAF9F6)] text-slate-800 border-t border-[#e7dbdc] font-bold"
+                    footerClassName="bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))] text-slate-800 border-[#e7dbdc] font-bold"
                   />
                 </motion.div>
               )}
@@ -3547,8 +3547,8 @@ export function BulkPayment({
 
                   {/* Transaction Audit Table */}
                   <div
-                    className="flex-1 min-h-0 relative border border-slate-200/80 rounded-none bg-white shadow-xs overflow-auto custom-scrollbar"
-                    style={{ borderWidth: "0.5px", borderRadius: "0px" }}
+                    className="reconcile-table-region table-body-region flex-1 min-h-0 relative rounded-none bg-white overflow-auto custom-scrollbar"
+                    style={{ borderRadius: "0px" }}
                   >
                     <table className="w-full min-w-max text-left border-separate border-spacing-0 text-[11px] font-sans">
                       <thead 
@@ -3922,23 +3922,28 @@ export function BulkPayment({
                         )}
                       </tbody>
                       <tfoot>
-                        <tr>
-                          <td 
-                            colSpan={10} 
-                            className="p-2.5 text-right font-bold uppercase tracking-wider text-[10px] border-b border-slate-300 text-slate-800"
-                            style={{ backgroundColor: "var(--table-header-bg, #FAF9F6)" }}
-                          >
-                            TỔNG LỆCH:
-                          </td>
-                          <td className="p-2.5 text-right font-mono font-black border-b border-r border-slate-300 bg-amber-50 text-rose-600">
-                            {formatMoneyVND(
-                              filteredTransactionAudits.reduce((acc, item) => acc + item.variance, 0)
-                            ).replace(" ₫", "")}
-                          </td>
-                          <td 
-                            className="p-2.5 border-b border-slate-300"
-                            style={{ backgroundColor: "var(--table-header-bg, #FAF9F6)" }}
-                          ></td>
+                        <tr className="total-row">
+                          {Array.from({ length: 12 }, (_, columnIndex) => (
+                            <td
+                              key={`reconcile-total-${columnIndex}`}
+                              className={`p-2.5 border-b border-t border-slate-300 ${columnIndex < 11 ? "border-r" : "border-r-0"} ${columnIndex === 9 ? "text-right font-bold uppercase tracking-wider text-[10px] text-slate-800" : ""} ${columnIndex === 10 ? "text-right font-mono font-black text-rose-600" : ""}`}
+                              style={{
+                                backgroundColor:
+                                  "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
+                              }}
+                            >
+                              {columnIndex === 9
+                                ? "TỔNG LỆCH:"
+                                : columnIndex === 10
+                                  ? formatMoneyVND(
+                                      filteredTransactionAudits.reduce(
+                                        (acc, item) => acc + item.variance,
+                                        0,
+                                      ),
+                                    ).replace(" ₫", "")
+                                  : ""}
+                            </td>
+                          ))}
                         </tr>
                       </tfoot>
                     </table>
@@ -3946,10 +3951,11 @@ export function BulkPayment({
 
                   {/* Pagination Footer */}
                   <div
-                    className="flex items-center justify-between shrink-0 z-10 relative table-footer-pagination border-x border-b border-slate-200"
+                    className="flex items-center justify-between shrink-0 z-10 relative table-footer-pagination border-t border-slate-200"
                     style={{
                       height: "44.9802px",
-                      backgroundColor: "var(--table-header-bg, #FAF9F6)",
+                      backgroundColor:
+                        "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                       paddingRight: "12px",
                       paddingLeft: "12px",
                       paddingTop: "3px",

@@ -3300,7 +3300,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                   >
                     {selectable && (
                       <td
-                        className={`border-b border-t border-[#e7dbdc] border-r-0 ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold ${stickyFirstColumn ? "sticky-col-selectable sticky-footer-col" : "sticky-footer-col"} total-row`}
+                        className={`border-b border-r border-t ${borderClass} ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold ${stickyFirstColumn ? "sticky-col-selectable sticky-footer-col" : "sticky-footer-col"} total-row`}
                         style={{
                           position: "sticky",
                           bottom: 0,
@@ -3308,7 +3308,6 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                           width: "40px",
                           minWidth: "40px",
                           maxWidth: "40px",
-                          borderRight: 'none',
                           ...(stickyFirstColumn ? { left: 0 } : {}),
                           backgroundColor: "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))"
                         }}
@@ -3316,7 +3315,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                     )}
                     {isRowNumberVisible && (
                       <td
-                        className={`border-b border-t border-[#e7dbdc] border-r-0 ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold ${stickyFirstColumn ? "sticky-col-row-number sticky-footer-col" : "sticky-footer-col"} total-row`}
+                        className={`border-b border-r border-t ${borderClass} ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} font-bold ${stickyFirstColumn ? "sticky-col-row-number sticky-footer-col" : "sticky-footer-col"} total-row`}
                         style={{
                           position: "sticky",
                           bottom: 0,
@@ -3324,7 +3323,6 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                           width: "50px",
                           minWidth: "50px",
                           maxWidth: "50px",
-                          borderRight: 'none',
                           ...(stickyFirstColumn ? { left: selectable ? 40 : 0 } : {}),
                           backgroundColor: "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))"
                         }}
@@ -3390,11 +3388,11 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
 
                         const isFirstDataCol = cIdx === 0;
 
-                        const hasContent = isFirstDataCol || (colIsNumeric && col.key !== "STT" && col.key !== "stt" && grandTotal != null);
+                        const isLastDataCol = cIdx === visibleColumns.length - 1;
                         return (
                           <td
                             key={`footer-grand-${col.key}`}
-                            className={`whitespace-nowrap font-bold border-b border-t border-[#e7dbdc] ${hasContent ? `border-r ${borderClass}` : 'border-r-0'} ${getAlignment(col)} uppercase text-[10px] ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""} ${stickyFirstColumn && isFirstDataCol ? "sticky-col-first-data sticky-footer-col" : ""} total-row`}
+                            className={`whitespace-nowrap font-bold border-b border-t ${isLastDataCol ? "border-r-0" : `border-r ${borderClass}`} ${getAlignment(col)} uppercase text-[10px] ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"}` + ` ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""} ${stickyFirstColumn && isFirstDataCol ? "sticky-col-first-data sticky-footer-col" : ""} total-row`}
                             style={{
                               padding: "var(--table-padding, 0.15rem 0.6rem)",
                               paddingTop: "1px",
@@ -3409,7 +3407,6 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                               bottom: 0,
                               zIndex: (stickyFirstColumn && isFirstDataCol) ? 45 : 30,
                               backgroundColor: "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
-                              borderRight: hasContent ? undefined : 'none',
                               ...((stickyFirstColumn && isFirstDataCol) ? {
                                 left: (selectable ? 40 : 0) + (isRowNumberVisible ? 50 : 0),
                               } : {})

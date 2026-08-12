@@ -1785,6 +1785,23 @@ div.audit-data-table-wrapper {
   box-shadow: none !important;
 }
 
+/* Bulk Payment uses the same three-part frame contract: this panel owns the
+   only outside border; its grid and pagination draw internal separators only. */
+.bulk-payment-data-panel.unified-table-frame {
+  border-width: 1px !important;
+}
+
+.bulk-payment-data-panel.unified-table-frame .reconcile-table-region {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.bulk-payment-data-panel.unified-table-frame .table-footer-pagination {
+  border-width: 1px 0 0 !important;
+  border-color: var(--table-frame-border, var(--grid-line-color, var(--border, #cbd5e1))) !important;
+  box-shadow: none !important;
+}
+
 .page-master-ae :where(table th, table td),
 .page-master-config :where(table th, table td) {
   border-width: 0 0.5px 0.5px 0 !important;

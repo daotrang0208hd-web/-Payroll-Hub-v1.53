@@ -2817,24 +2817,22 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                   >
                     {selectable && (
                       <td
-                        className={`border-b border-t border-slate-300 ${footerClassName || ""}`}
+                        className={`border-b border-r border-t border-slate-300 ${footerClassName || ""}`}
                         style={{
                           position: "sticky",
                           bottom: 0,
                           zIndex: 30,
-                          borderRight: "none",
                           backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                         }}
                       />
                     )}
                     {showRowNumber && (
                       <td
-                        className={`border-b border-t border-slate-300 ${footerClassName || ""}`}
+                        className={`border-b border-r border-t border-slate-300 ${footerClassName || ""}`}
                         style={{
                           position: "sticky",
                           bottom: 0,
                           zIndex: 30,
-                          borderRight: "none",
                           backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
                         }}
                       />
@@ -2852,7 +2850,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                       return (
                         <td
                           key={`footer-grand-${col.key}`}
-                          className={`whitespace-nowrap font-bold border-b border-t border-slate-300 border-r border-[#E2E8F0] ${getAlignment(col)} uppercase text-[0.75rem] ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"} ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""}`}
+                          className={`whitespace-nowrap font-bold border-b border-t border-slate-300 ${cIdx === visibleColumns.length - 1 ? "border-r-0" : "border-r border-[#E2E8F0]"} ${getAlignment(col)} uppercase text-[0.75rem] ${footerClassName || "bg-[var(--table-footer-bg,var(--table-header-bg,#F8F4EC))]"} ${(footerClassName || "").includes("text-") ? "" : "text-slate-800"} ${col.footerClassName || ""}`}
                           style={{
                             padding: "var(--table-padding, 0.4rem 0.6rem)",
                             paddingTop: "5px",
@@ -2867,7 +2865,6 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                             bottom: 0,
                             zIndex: 30,
                             backgroundColor: footerClassName ? undefined : "var(--table-footer-bg, var(--table-header-bg, #F8F4EC))",
-                            borderRight: (cIdx === 0 || grandTotal !== null) ? undefined : "none",
                           }}
                         >
                           {cIdx === 0
