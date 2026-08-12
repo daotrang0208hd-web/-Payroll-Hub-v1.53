@@ -411,6 +411,21 @@ export function MasterAE() {
     }, 0);
   }, [currentSummaryRows, currentTabTotalColumn]);
 
+  const currentTableSubtitle = useMemo(() => {
+    switch (activeTab) {
+      case "Sheet1_AE":
+        return `Chi tiết Gross Pay kỳ ${appData.globalMonth || currentPeriodVal} · ${currentData.data.length} dòng`;
+      case "Deductions":
+        return `Các khoản khấu trừ và thu khác · ${currentData.data.length} dòng`;
+      case "NetPay":
+        return `Số tiền thực chuyển sau đối soát · ${currentData.data.length} dòng`;
+      case "Mkt_Local_North":
+        return `Phân bổ lương AE Local North · ${currentData.data.length} dòng`;
+      default:
+        return `Dữ liệu Master kỳ ${appData.globalMonth || currentPeriodVal} · ${currentData.data.length} dòng`;
+    }
+  }, [activeTab, appData.globalMonth, currentData.data.length, currentPeriodVal]);
+
   const recordsByCategory = useMemo(() => {
     const counts: Record<string, number> = {};
     if (!currentData || !Array.isArray(currentData.data)) return [];
@@ -897,17 +912,22 @@ export function MasterAE() {
                               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
                                 <Columns2 className="h-4 w-4" />
                               </div>
-                              <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
-                                {activeTab === "Sheet1_AE"
-                                  ? `GROSS PAY - THÁNG ${appData.globalMonth}`
-                                  : activeTab === "Deductions"
-                                    ? "BẢNG CHI TIẾT KHẤU TRỪ VÀ THU KHÁC"
-                                    : activeTab === "NetPay"
-                                      ? "BẢNG LƯƠNG NET THỰC CHUYỂN"
-                                      : activeTab === "Mkt_Local_North"
-                                        ? "BẢNG PHÂN PHỐI LƯƠNG AE LOCAL (NORTH)"
-                                        : activeTab}
-                              </h3>
+                              <div className="min-w-0">
+                                <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
+                                  {activeTab === "Sheet1_AE"
+                                    ? `GROSS PAY - THÁNG ${appData.globalMonth}`
+                                    : activeTab === "Deductions"
+                                      ? "BẢNG CHI TIẾT KHẤU TRỪ VÀ THU KHÁC"
+                                      : activeTab === "NetPay"
+                                        ? "BẢNG LƯƠNG NET THỰC CHUYỂN"
+                                        : activeTab === "Mkt_Local_North"
+                                          ? "BẢNG PHÂN PHỐI LƯƠNG AE LOCAL (NORTH)"
+                                          : activeTab}
+                                </h3>
+                                <p className="truncate text-[9px] font-medium leading-3.5 text-muted-foreground">
+                                  {currentTableSubtitle}
+                                </p>
+                              </div>
                             </div>
 
                             <div className="flex shrink-0 items-center gap-3">

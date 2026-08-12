@@ -1599,6 +1599,59 @@ div.audit-data-table-wrapper {
   box-shadow: none !important;
 }
 
+/* Master uses one thin frame only; nested shells must not stack outlines. */
+.page-master-ae .table-container.master-ae-table-wrapper {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.page-master-ae .unified-table-frame,
+.page-master-config .unified-table-frame {
+  border-width: 0.5px !important;
+}
+
+.page-master-ae .unified-table-frame .data-table-wrapper,
+.page-master-config .unified-table-frame .data-table-wrapper,
+.bulk-payment-data-panel .data-table-wrapper {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.page-master-ae :where(table th, table td),
+.page-master-config :where(table th, table td) {
+  border-width: 0 0.5px 0.5px 0 !important;
+}
+
+.page-master-ae :where(.unified-table-frame-header, .unified-table-frame-footer, .table-footer-pagination),
+.page-master-config :where(.unified-table-frame-header, .unified-table-frame-footer, .table-footer-pagination) {
+  --table-frame-border: var(--grid-line-color, var(--border, #cbd5e1));
+  border-width: 0 0 0.5px !important;
+}
+
+.page-master-ae :where(.unified-table-frame-footer, .table-footer-pagination),
+.page-master-config :where(.unified-table-frame-footer, .table-footer-pagination) {
+  border-width: 0.5px 0 0 !important;
+}
+
+/* Keep the two Bulk Payment panels independent without an extra connecting rule. */
+.bulk-payment-layout {
+  column-gap: 8px !important;
+}
+
+.bulk-payment-side-panel,
+.bulk-payment-data-panel {
+  margin: 0 !important;
+  border-width: 0.5px !important;
+  border-radius: 0 !important;
+}
+
+/* Pivot rows and totals remain regular weight; headers retain hierarchy. */
+.pivot-master-table tbody td,
+.pivot-master-table tbody td > span,
+.pivot-master-table tfoot td {
+  font-weight: 400 !important;
+}
+
 /* Audit source cards use the same one-frame + one-divider visual grammar. */
 .audit-source-card {
   border-radius: 0 !important;
@@ -1672,6 +1725,3 @@ div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-
 div#root:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > button:nth-of-type(1) {
   height: 26.9853px !important;
 }
-
-
-

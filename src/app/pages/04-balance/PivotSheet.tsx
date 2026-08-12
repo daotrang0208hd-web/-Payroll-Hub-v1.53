@@ -1530,6 +1530,9 @@ export function PivotSheet() {
       ? sortedFlatRows
       : sortedFlatRows.slice(startIndex, endIndex);
   const displayedRangeStart = totalRowsCount === 0 ? 0 : startIndex + 1;
+  const pivotLabelColumnSpan = ["no", "business", "charge", "month"].filter(
+    (key) => !hiddenColumns[key],
+  ).length;
 
   const renderRows = () => {
     if (paginatedRows.length === 0) {
@@ -1697,20 +1700,18 @@ export function PivotSheet() {
   };
 
   return (
-    <div className="unified-table-frame flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
+    <div className="pivot-master-frame unified-table-frame flex h-full w-full flex-col gap-0 overflow-hidden border border-[#e7dbdc] bg-[var(--card,#fff)] p-0 text-[var(--card-foreground)]">
       {/* HEADER SECTION */}
       <div className="unified-table-frame-header flex min-h-[56px] flex-wrap items-center justify-between gap-3 border-b border-border bg-primary/[0.035] px-3 py-2">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
             <FileSpreadsheet className="h-4 w-4" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-[12px] font-black uppercase tracking-[0.14em] text-primary">Pivot Master</h1>
-              <span className="rounded-full border border-primary/15 bg-primary/[0.06] px-2 py-0.5 text-[9px] font-bold text-primary">
-                {totalCenters} Trung tâm
-              </span>
-            </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">Pivot Master</h1>
+            <p className="truncate text-[9px] font-medium leading-3.5 text-muted-foreground">
+              Tổng hợp chi phí theo BU, L07 và loại · {totalCenters} trung tâm
+            </p>
           </div>
           <div className="hidden h-8 items-center border-l border-primary/15 pl-4 sm:flex">
             <div className="flex flex-col items-end leading-tight">
@@ -1917,7 +1918,7 @@ export function PivotSheet() {
       {/* MAIN DATA TABLE */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card,#fff)]">
         <div className="flex-1 overflow-auto relative">
-          <table className="w-full border-collapse select-none text-left text-xs" style={{ fontFamily: "var(--font-table, var(--font-mono))", fontSize: "13px" }}>
+          <table className="pivot-master-table w-full border-collapse select-none text-left text-xs" style={{ fontFamily: "var(--font-table, var(--font-mono))", fontSize: "13px" }}>
             <thead className="sticky top-0 z-20 border-b border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] font-bold text-primary shadow-2xs">
               <tr>
                 {!hiddenColumns.no && (
@@ -2031,12 +2032,16 @@ export function PivotSheet() {
 
             {/* GRAND TOTAL FOOTER ROW */}
             {paginatedRows.length > 0 && (
-              <tfoot className="sticky bottom-0 z-10 border-t border-primary/25 bg-primary/[0.085] font-bold text-primary shadow-sm">
+              <tfoot className="sticky bottom-0 z-10 border-t border-primary/25 bg-primary/[0.085] text-primary shadow-sm">
                 <tr>
-                  {!hiddenColumns.no && <td className="border-r-0 px-2 py-2.5 text-center font-mono text-primary">TỔNG</td>}
-                  {!hiddenColumns.business && <td className="py-2.5 px-2.5 text-center border-r-0"></td>}
-                  {!hiddenColumns.charge && <td className="border-r-0 px-2.5 py-2.5 text-left font-extrabold text-primary">TỔNG CỘNG TẤT CẢ</td>}
-                  {!hiddenColumns.month && <td className="py-2.5 px-2.5 text-center border-r-0"></td>}
+                  {pivotLabelColumnSpan > 0 && (
+                    <td
+                      colSpan={pivotLabelColumnSpan}
+                      className="border-r border-[#e7dbdc] px-2.5 py-2.5 text-left text-primary"
+                    >
+                      TỔNG CỘNG TẤT CẢ
+                    </td>
+                  )}
                   {grandTotals.map((v, idx) => {
                     const type = safeTypeColumns[idx];
                     if (hiddenColumns[`type_${type}`]) return null;
@@ -2046,7 +2051,7 @@ export function PivotSheet() {
                       <td 
                         key={idx} 
                         style={{ width: w, minWidth: w, maxWidth: w }}
-                        className="border-r border-[#e7dbdc] px-2.5 py-2.5 text-right font-mono text-xs font-bold text-primary"
+                        className="border-r border-[#e7dbdc] px-2.5 py-2.5 text-right font-mono text-xs text-primary"
                       >
                         {v ? formatNumber(v) : "0"}
                       </td>
@@ -2055,7 +2060,7 @@ export function PivotSheet() {
                   {!hiddenColumns.grandTotal && (
                     <td 
                       style={{ width: columnWidths["grandTotal"] || 140, minWidth: columnWidths["grandTotal"] || 140, maxWidth: columnWidths["grandTotal"] || 140 }}
-                      className="bg-primary/[0.08] px-3 py-2.5 text-right font-mono text-xs font-extrabold text-primary"
+                      className="bg-primary/[0.08] px-3 py-2.5 text-right font-mono text-xs text-primary"
                     >
                       {superGrandTotal ? formatNumber(superGrandTotal) : "0"}
                     </td>

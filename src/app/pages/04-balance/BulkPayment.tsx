@@ -1922,7 +1922,7 @@ export function BulkPayment({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="flex-1 w-full min-h-0 flex flex-row gap-2 bg-transparent overflow-hidden p-0 relative"
+      className="bulk-payment-layout flex-1 w-full min-h-0 flex flex-row gap-2 bg-transparent overflow-hidden p-0 relative"
       style={{
         borderWidth: "0px",
         gap: showLeftCard ? "8px" : "0px",
@@ -1935,7 +1935,7 @@ export function BulkPayment({
       {/* Left Panel - Actions & Info (Unified Scrollable Card) */}
       {showLeftCard && (
         <div
-          className="payroll-theme-card w-[340px] border flex flex-col gap-0 shrink-0 overflow-hidden min-h-0 relative select-text shadow-sm h-full rounded-2xl mr-4"
+          className="bulk-payment-side-panel payroll-theme-card w-[340px] border flex flex-col gap-0 shrink-0 overflow-hidden min-h-0 relative select-text shadow-sm h-full rounded-none"
           style={{
             backgroundColor: "var(--card, #fff)",
           }}
@@ -2961,10 +2961,10 @@ export function BulkPayment({
 
       {/* Right Panel - Data View */}
       <div
-        className="flex-1 bg-white border border-slate-300 dark:border-slate-700 rounded-xl flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full"
+        className="bulk-payment-data-panel flex-1 bg-white border border-slate-300 dark:border-slate-700 rounded-none flex flex-col overflow-hidden min-h-0 shadow-xs relative pb-0 h-full"
         style={{
-          borderRadius: rightPanelTab === "visuals" ? "0px" : "12px",
-          borderWidth: rightPanelTab === "visuals" ? "0px" : "1px",
+          borderRadius: "0px",
+          borderWidth: rightPanelTab === "visuals" ? "0px" : "0.5px",
           borderColor: "#cbd5e1",
           marginLeft: "0px",
           paddingTop: "0px",
@@ -3000,22 +3000,23 @@ export function BulkPayment({
               <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />
             </button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 bg-transparent py-1 px-1.5 text-primary hover:bg-primary/[0.05] transition-all active:scale-95 cursor-pointer select-none border-none shadow-none outline-none rounded-lg"
-                  title="Chuyển bảng"
-                >
-                  <span className="text-[12px] font-black uppercase tracking-[0.18em]">
-                    {rightPanelTab === "table"
-                      ? "TRANSACTION"
-                      : rightPanelTab === "reconcile"
-                      ? "ĐỐI SOÁT"
-                      : "ANALYSIS"}
-                  </span>
-                </button>
-              </DropdownMenuTrigger>
+            <div className="min-w-0">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 bg-transparent py-0.5 px-1.5 text-primary hover:bg-primary/[0.05] transition-all active:scale-95 cursor-pointer select-none border-none shadow-none outline-none rounded-lg"
+                    title="Chuyển bảng"
+                  >
+                    <span className="text-[12px] font-black uppercase tracking-[0.18em]">
+                      {rightPanelTab === "table"
+                        ? "TRANSACTION"
+                        : rightPanelTab === "reconcile"
+                        ? "ĐỐI SOÁT"
+                        : "ANALYSIS"}
+                    </span>
+                  </button>
+                </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl rounded-xl p-1 z-50">
                 <DropdownMenuLabel className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
                   CHUYỂN BÀNG
@@ -3062,8 +3063,16 @@ export function BulkPayment({
                   <BarChart2 className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <span>Analysis</span>
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <p className="max-w-[260px] truncate px-1.5 text-[9px] font-medium leading-3.5 text-slate-500">
+                {rightPanelTab === "table"
+                  ? `${displayBankExportData.length} giao dịch chuyển khoản`
+                  : rightPanelTab === "reconcile"
+                    ? "Đối chiếu số tiền thực tế và dữ liệu Master"
+                    : "Theo dõi biến động và vòng đời các khoản Hold"}
+              </p>
+            </div>
 
             {/* General Summary Stats - Compacted */}
             {displayBankExportData.length > 0 && rightPanelTab === "table" && (

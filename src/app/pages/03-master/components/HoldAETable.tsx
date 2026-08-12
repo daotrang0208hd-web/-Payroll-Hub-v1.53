@@ -614,9 +614,14 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
               <Columns2 className="h-4 w-4" />
             </div>
-            <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
-              DEDUCTIONS
-            </h3>
+            <div className="min-w-0">
+              <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
+                DEDUCTIONS
+              </h3>
+              <p className="truncate text-[9px] font-medium leading-3.5 text-muted-foreground">
+                Theo dõi Hold, Cancel, Bonus và Add · {filteredData.data.length} dòng
+              </p>
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-3">
