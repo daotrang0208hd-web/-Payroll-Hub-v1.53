@@ -8,12 +8,17 @@ export const SaveStatusCard: React.FC<{
   style?: React.CSSProperties;
   textStyle?: React.CSSProperties;
   iconStyle?: React.CSSProperties;
-}> = ({ className, style, textStyle, iconStyle }) => {
+  scope?: "default" | "transaction";
+}> = ({ className, style, textStyle, iconStyle, scope = "default" }) => {
   const { appData } = useAppData();
+
+  const transactionActivity = appData?.TransactionActivity;
+  const timestamp = scope === "transaction"
+    ? transactionActivity?.lastSavedAt || transactionActivity?.generatedAt
+    : appData?.updatedAt;
+  const lastUpdated = timestamp ? new Date(timestamp) : null;
   
-  const lastUpdated = appData?.updatedAt ? new Date(appData.updatedAt) : null;
-  
-  if (!lastUpdated) return null;
+  if (!lastUpdated || isNaN(lastUpdated.getTime())) return null;
 
   // Format with AM/PM then replace to SA/CH for Vietnamese localization
   const formattedTime = format(lastUpdated, "dd/MM/yyyy hh:mm a");
@@ -25,7 +30,9 @@ export const SaveStatusCard: React.FC<{
     <div 
       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50/80 border border-blue-200/60 shadow-sm relative z-10 animate-in fade-in zoom-in-95 w-max shrink-0 ${className || ""}`}
       style={style}
-      title="Dữ liệu chỉ phản ánh các giá trị từ Roster Center/GG Sheet được ghi nhận trước thời điểm này. Bạn cần click 'Lưu dữ liệu' để chốt bản ghi mới."
+      title={scope === "transaction"
+        ? "Thời điểm cập nhật Transaction mới nhất và tổng số lần đã lưu chỉnh sửa kể từ khi tạo bảng kê."
+        : "Dữ liệu chỉ phản ánh các giá trị đã được ghi nhận trước thời điểm này."}
     >
       <Clock 
         className="w-3.5 h-3.5 text-blue-500 animate-pulse shrink-0" 
@@ -35,7 +42,12 @@ export const SaveStatusCard: React.FC<{
         className="text-[0.65rem] font-bold tracking-wider text-blue-700 uppercase whitespace-nowrap"
         style={textStyle}
       >
-        SAVED: {formattedWithAmPm}
+        {scope === "transaction" ? "TRANSACTION" : "SAVED"}: {formattedWithAmPm}
+        {scope === "transaction" && (
+          <span className="ml-1.5 border-l border-blue-200 pl-1.5">
+            SỬA: {transactionActivity?.editCount || 0}
+          </span>
+        )}
       </span>
     </div>
   );

@@ -779,6 +779,7 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
             onAddRow={onAddRow}
             isEditable={true}
             showRowNumber={true}
+            autoHideZeroSumColumns={false}
             selectable={false}
             bulkActions={[
               {

@@ -41,6 +41,7 @@ import {
   fetchWithBackoff,
   removeVietnameseTones,
   formatIdNumber,
+  generateUUID,
 } from "../../lib/utils/master-data-utils";
 import {
   isBankMasterSheetName,
@@ -176,7 +177,7 @@ function parseMasterFileInWorker(
   isMktFile: boolean,
   targetFields: string[],
 ) {
-  const requestId = crypto.randomUUID();
+  const requestId = generateUUID();
   const worker = getMasterImportWorker();
   return new Promise<MasterWorkbookPayload>((resolve, reject) => {
     pendingMasterRequests.set(requestId, { resolve, reject });
@@ -680,7 +681,7 @@ export function AEDataConfig({
       const id =
         choice.action === "update" && choice.targetId
           ? choice.targetId
-          : `${Date.now()}-${index}-${crypto.randomUUID()}`;
+          : `${Date.now()}-${index}-${generateUUID()}`;
       let parsed: MasterWorkbookPayload | undefined;
       let status = "Uploaded";
 
@@ -1016,7 +1017,7 @@ export function AEDataConfig({
                   const pivotBusiness = pivotCenterInfo?.bus || business;
 
                   rosterDataToAppend.push({
-                    _rowId: crypto.randomUUID(),
+                    _rowId: generateUUID(),
                     _sourceFile: item.name || "",
                     center: rawCenter,
                     l07: pivotL07,
@@ -2014,7 +2015,7 @@ export function AEDataConfig({
         const total = calcPayment;
         const key = `${idNum}|${fname}|${l07}|${rowMonth}|${total}`;
         if (!seenSheet1Keys.has(key)) {
-          row.id = crypto.randomUUID();
+          row.id = generateUUID();
           finalSheet1Data.push(row);
           seenSheet1Keys.add(key);
         }
@@ -2034,7 +2035,7 @@ export function AEDataConfig({
         const total = parseMoneyToNumber(row["TOTAL PAYMENT"]);
         const key = `${idNum}|${fname}|${acc}|${rowMonth}|${total}`;
         if (!seenBankKeys.has(key)) {
-          row.id = crypto.randomUUID();
+          row.id = generateUUID();
           row["No"] = finalBankData.length + 1;
           finalBankData.push(row);
           seenBankKeys.add(key);
@@ -2079,7 +2080,7 @@ export function AEDataConfig({
         row["L07"] = l07;
         row["Business"] = business;
         row["BU"] = business;
-        row.id = crypto.randomUUID();
+        row.id = generateUUID();
 
         finalHoldData.push(row);
       });
@@ -2204,7 +2205,7 @@ export function AEDataConfig({
           if (!row["Nghiệp vụ"]) row["Nghiệp vụ"] = rNghiepVu || "Hold";
           delete row._sourceMonth;
           delete row._sourceOperation;
-          row.id = row.id || crypto.randomUUID();
+          row.id = row.id || generateUUID();
           row._uploadTimestamp = row._uploadTimestamp || uploadTime;
         });
 
@@ -2223,7 +2224,7 @@ export function AEDataConfig({
 
         existingHoldData.forEach((row) => {
           const key = holdKeyFn(row);
-          row.id = row.id || crypto.randomUUID();
+          row.id = row.id || generateUUID();
           row._recordId = row._recordId || key;
           if (!row._uploadTimestamp) {
             row._uploadTimestamp = new Date(0).toISOString(); // Backfill old records
@@ -2479,7 +2480,7 @@ export function AEDataConfig({
       style={{ padding: "6px" }}
     >
       {/* One shared frame for title, data area and pagination. */}
-      <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-none border border-border">
+      <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-xl border border-border shadow-sm">
 
         {/* Integrated Header & Controls */}
         <div className="master-config-header unified-table-frame-header relative z-10 flex w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 px-4 md:flex-row md:items-center">

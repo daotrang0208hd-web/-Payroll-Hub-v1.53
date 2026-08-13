@@ -97,6 +97,7 @@ import {
 import { DataTable } from "../../components/DataTable";
 import { BulkPaymentAnalytics } from "./components/BulkPaymentAnalytics";
 import { buildBulkPaymentAnalytics } from "../../lib/utils/bulk-payment-analytics";
+import { markTransactionSaved } from "../../lib/utils/transaction-activity";
 import { motion, AnimatePresence } from "motion/react";
 import {
   DropdownMenu,
@@ -542,6 +543,7 @@ export function BulkPayment({
           BankExport: { ...prev.BankExport, data: newBankData },
           Sheet1_AE: { ...prev.Sheet1_AE, data: newSheet1 },
           Hold_AE: { ...prev.Hold_AE, data: newHold },
+          TransactionActivity: markTransactionSaved(prev),
         };
       });
       toast.success("Đã cập nhật và đồng bộ dữ liệu sang bảng gốc thành công!");
@@ -622,6 +624,9 @@ export function BulkPayment({
           ...prev,
           Sheet1_AE: { ...prev.Sheet1_AE, data: newSheet1 },
           Hold_AE: { ...prev.Hold_AE, data: newHold },
+          ...(updatedSheet1 || updatedHold
+            ? { TransactionActivity: markTransactionSaved(prev) }
+            : {}),
         };
       });
     },
@@ -1676,6 +1681,47 @@ export function BulkPayment({
     isMonthInStrComp,
   ]);
 
+  useEffect(() => {
+    const saveVersion = appData.TransactionActivity?.saveVersion || 0;
+    const transactionPeriodKey = `Tháng ${currentMonthNumComp}/${currentYearNumComp}`;
+    const syncedVersion =
+      appData.TrialBalanceTransactionVersions?.[transactionPeriodKey] || 0;
+    if (
+      saveVersion <= syncedVersion ||
+      Math.abs(reconciliationAudit.netVariance) >= 1
+    ) {
+      return;
+    }
+
+    updateAppData((prev) => {
+      const latestSaveVersion = prev.TransactionActivity?.saveVersion || 0;
+      const currentSyncedVersion =
+        prev.TrialBalanceTransactionVersions?.[transactionPeriodKey] || 0;
+      if (
+        latestSaveVersion <= currentSyncedVersion
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        TrialBalanceTransactionVersion: latestSaveVersion,
+        TrialBalanceTransactionVersions: {
+          ...(prev.TrialBalanceTransactionVersions || {}),
+          [transactionPeriodKey]: latestSaveVersion,
+        },
+        TrialBalanceRefreshedAt:
+          prev.TransactionActivity?.lastSavedAt || new Date().toISOString(),
+      };
+    });
+  }, [
+    appData.TransactionActivity?.saveVersion,
+    appData.TrialBalanceTransactionVersions,
+    currentMonthNumComp,
+    currentYearNumComp,
+    reconciliationAudit.netVariance,
+    updateAppData,
+  ]);
+
   const activeIssueCategoriesCount = 
     (reconciliationAudit.varianceCount > 0 ? 1 : 0) + 
     (reconciliationAudit.missingInfoCount > 0 ? 1 : 0) + 
@@ -1819,6 +1865,9 @@ export function BulkPayment({
         ...prev,
         Sheet1_AE: { ...prev.Sheet1_AE, data: newSheet1 },
         Hold_AE: { ...prev.Hold_AE, data: newHold },
+        ...(syncCount > 0
+          ? { TransactionActivity: markTransactionSaved(prev) }
+          : {}),
       };
     });
   }, [filteredTransactionAudits, updateAppData]);

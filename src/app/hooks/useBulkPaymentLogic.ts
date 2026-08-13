@@ -5,9 +5,14 @@ import {
   parseMoneyToNumber,
   formatMoneyVND,
   removeVietnameseTones,
+  generateUUID,
 } from "../lib/utils/data-utils";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
+import {
+  markTransactionGenerated,
+  markTransactionSaved,
+} from "../lib/utils/transaction-activity";
 
 // ==========================================
 // PURE UTILITY & LOGIC HELPER FUNCTIONS
@@ -1022,7 +1027,7 @@ export function useBulkPaymentLogic() {
         reportBizTotals[identifiedBiz] = (reportBizTotals[identifiedBiz] || 0) + amount;
 
         return {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           "Payment Serial Number": idx + 1,
           "Tháng báo cáo": appData.globalMonth || "03.2026",
           "Transaction Type Code": "BT",
@@ -1050,6 +1055,7 @@ export function useBulkPaymentLogic() {
           ...prev.BankExport,
           data: data,
         },
+        TransactionActivity: markTransactionGenerated(prev),
       }));
 
       const reportTotal = data.reduce((sum, r) => sum + r["Payment Amount"], 0);
@@ -1242,7 +1248,11 @@ export function useBulkPaymentLogic() {
       );
       if (rowIndex === -1) return prev;
       newData[rowIndex] = { ...newData[rowIndex], [colKey]: value };
-      return { ...prev, BankExport: { ...prev.BankExport, data: newData } };
+      return {
+        ...prev,
+        BankExport: { ...prev.BankExport, data: newData },
+        TransactionActivity: markTransactionSaved(prev),
+      };
     });
   }, [updateAppData]);
 
@@ -1265,7 +1275,11 @@ export function useBulkPaymentLogic() {
         ...row,
         "Payment Serial Number": idx + 1,
       }));
-      return { ...prev, BankExport: { ...prev.BankExport, data: updatedData } };
+      return {
+        ...prev,
+        BankExport: { ...prev.BankExport, data: updatedData },
+        TransactionActivity: markTransactionSaved(prev),
+      };
     });
   }, [updateAppData]);
 
@@ -1293,7 +1307,11 @@ export function useBulkPaymentLogic() {
         ...row,
         "Payment Serial Number": idx + 1,
       }));
-      return { ...prev, BankExport: { ...prev.BankExport, data: updatedData } };
+      return {
+        ...prev,
+        BankExport: { ...prev.BankExport, data: updatedData },
+        TransactionActivity: markTransactionSaved(prev),
+      };
     });
   }, [updateAppData]);
 

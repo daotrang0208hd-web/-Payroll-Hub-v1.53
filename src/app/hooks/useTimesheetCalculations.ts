@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, useState, useEffect, useRef } from "react";
-import { parseAnyDate } from "../lib/utils/data-utils";
+import { generateUUID, parseAnyDate } from "../lib/utils/data-utils";
 import { mapL07 } from "../lib/utils/center-utils";
 import { TASK_COLUMNS } from "../constants/timesheet-logic";
 import { useAppData } from "../lib/contexts/AppDataContext";
@@ -188,7 +188,7 @@ export function useTimesheetCalculations(
     try {
       const worker = new TimesheetWorker();
       workerRef.current = worker;
-      const requestId = crypto.randomUUID();
+      const requestId = generateUUID();
       const chunkedResult: Record<string, any[]> = {
         processedRosterData: [],
         employeeSummary: [],

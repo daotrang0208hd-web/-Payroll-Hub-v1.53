@@ -29,7 +29,13 @@ import {
   Menu,
   PanelLeft,
 } from "lucide-react";
-import { parseAnyDate, getVal, formatIdNumber } from "../../lib/utils/data-utils";
+import {
+  parseAnyDate,
+  getVal,
+  formatIdNumber,
+  prepareDataForExport,
+  normalizeDateFilterValue,
+} from "../../lib/utils/data-utils";
 import {
   Tooltip,
   TooltipTrigger,
@@ -50,7 +56,6 @@ import { ConfirmDialog } from "../../components/shared/ConfirmDialog";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
-import { prepareDataForExport } from "../../lib/utils/data-utils";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -853,12 +858,15 @@ export function Audit() {
       for (let k = i; k < j; k++) {
         const s = allSessions[k];
         const isFirst = k === i;
+        const normalizedSessionDate = normalizeDateFilterValue(
+          s.fullDate || s.date || "",
+        );
         finalData.push({
           groupId: i,
           isFirstInGroup: isFirst,
           id: `detail_${k}_${s._parentClassName}`,
           className: s._parentClassName || "KHÔNG CÓ LỚP HỌC",
-          dateStr: s.fullDate || s.date || "",
+          dateStr: normalizedSessionDate,
           center: s._parentCenter || "",
           bu: s._parentBu || "",
           teacherName: spanTeacherName,
@@ -873,7 +881,7 @@ export function Audit() {
           actualTAs: actualTAsCount,
           variance: sessionStatus,
           type: s._type || "",
-          _fullDate: s.fullDate || s.date || "",
+          _fullDate: normalizedSessionDate,
           _fullClassName: s._parentClassName || "KHÔNG CÓ LỚP HỌC",
         });
       }

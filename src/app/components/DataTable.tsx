@@ -56,6 +56,9 @@ import {
   formatIdNumber,
   isChargeAmountColumn,
   isNonSummableTextColumn,
+  isDateColumn,
+  normalizeDateFilterValue,
+  parseAnyDate,
 } from "../lib/utils/data-utils";
 import { formatVNRobust } from "../lib/utils/format-utils";
 import { ColumnFormatDialog } from "./ColumnFormatDialog";
@@ -294,6 +297,21 @@ const ColumnFilter = ({
 }: any) => {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const isCurrentDateColumn = isDateColumn(
+    column.key,
+    column.label,
+    column.type,
+  );
+  const getFilterValue = (value: any, key = column.key) => {
+    const shouldNormalizeDate =
+      key === column.key
+        ? isCurrentDateColumn
+        : isDateColumn(key, key);
+    if (shouldNormalizeDate) {
+      return normalizeDateFilterValue(value) || "undefined";
+    }
+    return value == null || value === "" ? "undefined" : String(value);
+  };
 
   const uniqueValues = useMemo(() => {
     if (!isOpen) return [];
@@ -314,9 +332,11 @@ const ColumnFilter = ({
           if (str.includes(lowerSearch)) return true;
           if (trimmedZeroSearch && str.includes(trimmedZeroSearch)) return true;
 
-          const formattedId = formatIdNumber(val).toLowerCase();
-          if (formattedId && formattedId.includes(lowerSearch)) return true;
-          if (trimmedZeroSearch && formattedId && formattedId.includes(trimmedZeroSearch)) return true;
+          if (/^[+\d.eE\s]+$/.test(str)) {
+            const formattedId = formatIdNumber(val).toLowerCase();
+            if (formattedId && formattedId.includes(lowerSearch)) return true;
+            if (trimmedZeroSearch && formattedId && formattedId.includes(trimmedZeroSearch)) return true;
+          }
 
           return false;
         }),
@@ -327,8 +347,7 @@ const ColumnFilter = ({
     Object.entries(filterState).forEach(([key, allowedValues]) => {
       if (key !== column.key && allowedValues instanceof Set) {
         currentData = currentData.filter((row: any) => {
-          const rawVal = row[key];
-          const val = (rawVal == null || rawVal === "") ? "undefined" : rawVal;
+          const val = getFilterValue(row[key], key);
           return allowedValues.has(val);
         });
       }
@@ -336,12 +355,7 @@ const ColumnFilter = ({
 
     // 3. Extract unique values from contextually filtered data
     currentData.forEach((row: any) => {
-      const val = row[column.key];
-      if (val != null && val !== "") {
-        vals.add(val);
-      } else {
-        vals.add("undefined");
-      }
+      vals.add(getFilterValue(row[column.key]));
     });
 
     // Also include currently selected values even if they aren't in the contextually filtered data
@@ -355,7 +369,7 @@ const ColumnFilter = ({
       if (b === "undefined") return 1;
       return String(a).localeCompare(String(b), undefined, { numeric: true });
     });
-  }, [allData, column.key, filterState, searchTerm, isOpen]);
+  }, [allData, column.key, column.label, column.type, filterState, searchTerm, isOpen, isCurrentDateColumn]);
 
   const filteredValues = useMemo(() => {
     if (!search) return uniqueValues;
@@ -1465,11 +1479,19 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         if (allowedValues && allowedValues.size > 0) {
           result = result.filter((row) => {
             const rawVal = row[key];
+            const column = columns.find((item) => item.key === key);
+            const normalizedFilterValue = isDateColumn(
+              key,
+              column?.label,
+              columnTypes[key] || column?.type,
+            )
+              ? normalizeDateFilterValue(rawVal) || "undefined"
+              : rawVal;
             if (rawVal == null || rawVal === "") {
               return allowedValues.has("undefined") || allowedValues.has("") || allowedValues.has(null);
             }
-            if (allowedValues.has(rawVal)) return true;
-            const strVal = String(rawVal);
+            if (allowedValues.has(normalizedFilterValue)) return true;
+            const strVal = String(normalizedFilterValue);
             if (allowedValues.has(strVal)) return true;
 
             for (const allowed of allowedValues) {
@@ -1527,10 +1549,14 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
             return sortConfig.direction === "asc" ? aNum - bNum : bNum - aNum;
           }
 
-          if (type === "date" && aVal instanceof Date && bVal instanceof Date) {
-            return sortConfig.direction === "asc"
-              ? aVal.getTime() - bVal.getTime()
-              : bVal.getTime() - aVal.getTime();
+          if (type === "date" || isDateColumn(sortConfig.key, col?.label, type)) {
+            const aDate = parseAnyDate(aVal);
+            const bDate = parseAnyDate(bVal);
+            if (aDate && bDate) {
+              return sortConfig.direction === "asc"
+                ? aDate.getTime() - bDate.getTime()
+                : bDate.getTime() - aDate.getTime();
+            }
           }
 
           const aStr = String(aVal).toLowerCase();
@@ -3554,6 +3580,7 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                 }}
               >
                 <SaveStatusCard 
+                  scope={storageKey === "bulk_payment" ? "transaction" : "default"}
                   className="!px-1.5 !py-0.5 !rounded-[10px] bg-slate-50 border border-[#e7dbdc]/80 shadow-none gap-1 ml-1"
                   style={{
                     paddingLeft: "0px",

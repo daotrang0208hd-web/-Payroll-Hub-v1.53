@@ -1,6 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { Root } from "./pages/Root";
-import { HoldDashboardPage } from "./pages/04-balance/HoldDashboardPage";
+import { loadHoldDashboardPage } from "./lib/lazy-routes";
 
 export const router = createBrowserRouter([
   {
@@ -32,7 +32,9 @@ export const router = createBrowserRouter([
       },
       {
         path: "hold-dashboard",
-        Component: HoldDashboardPage,
+        lazy: async () => ({
+          Component: (await loadHoldDashboardPage()).HoldDashboardPage,
+        }),
       },
       {
         path: "audit",

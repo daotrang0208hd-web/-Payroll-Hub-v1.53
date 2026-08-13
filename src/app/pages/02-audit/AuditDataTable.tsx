@@ -47,7 +47,14 @@ import {
   DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { parseMoneyToNumber, formatNumber, formatIdNumber } from "../../lib/utils/data-utils";
+import {
+  parseMoneyToNumber,
+  formatNumber,
+  formatIdNumber,
+  isDateColumn,
+  normalizeDateFilterValue,
+  parseAnyDate,
+} from "../../lib/utils/data-utils";
 import { formatVNRobust } from "../../lib/utils/format-utils";
 import { ColumnFormatDialog } from "../../components/ColumnFormatDialog";
 import { Popover, PopoverContent, PopoverTrigger } from "../../components/ui/popover";
@@ -181,6 +188,21 @@ const ColumnFilter = ({
 }: any) => {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const isCurrentDateColumn = isDateColumn(
+    column.key,
+    column.label,
+    column.type,
+  );
+  const getFilterValue = (value: any, key = column.key) => {
+    const shouldNormalizeDate =
+      key === column.key
+        ? isCurrentDateColumn
+        : isDateColumn(key, key);
+    if (shouldNormalizeDate) {
+      return normalizeDateFilterValue(value) || "undefined";
+    }
+    return value == null || value === "" ? "undefined" : String(value);
+  };
 
   const uniqueValues = useMemo(() => {
     if (!isOpen) return [];
@@ -201,9 +223,11 @@ const ColumnFilter = ({
           if (str.includes(lowerSearch)) return true;
           if (trimmedZeroSearch && str.includes(trimmedZeroSearch)) return true;
 
-          const formattedId = formatIdNumber(val).toLowerCase();
-          if (formattedId && formattedId.includes(lowerSearch)) return true;
-          if (trimmedZeroSearch && formattedId && formattedId.includes(trimmedZeroSearch)) return true;
+          if (/^[+\d.eE\s]+$/.test(str)) {
+            const formattedId = formatIdNumber(val).toLowerCase();
+            if (formattedId && formattedId.includes(lowerSearch)) return true;
+            if (trimmedZeroSearch && formattedId && formattedId.includes(trimmedZeroSearch)) return true;
+          }
 
           return false;
         }),
@@ -214,19 +238,14 @@ const ColumnFilter = ({
     Object.entries(filterState).forEach(([key, allowedValues]) => {
       if (key !== column.key && allowedValues instanceof Set) {
         currentData = currentData.filter((row: any) =>
-          allowedValues.has(row[key]),
+          allowedValues.has(getFilterValue(row[key], key)),
         );
       }
     });
 
     // 3. Extract unique values from contextually filtered data
     currentData.forEach((row: any) => {
-      const val = row[column.key];
-      if (val != null && val !== "") {
-        vals.add(val);
-      } else {
-        vals.add("undefined");
-      }
+      vals.add(getFilterValue(row[column.key]));
     });
 
     // Also include currently selected values even if they aren't in the contextually filtered data
@@ -241,7 +260,7 @@ const ColumnFilter = ({
       if (b === "undefined") return 1;
       return String(a).localeCompare(String(b), undefined, { numeric: true });
     });
-  }, [allData, column.key, filterState, searchTerm, isOpen]);
+  }, [allData, column.key, column.label, column.type, filterState, searchTerm, isOpen, isCurrentDateColumn]);
 
   const filteredValues = useMemo(() => {
     if (!search) return uniqueValues;
@@ -1125,7 +1144,20 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
       // Apply filters
       Object.entries(columnFilters).forEach(([key, allowedValues]) => {
         if (allowedValues) {
-          result = result.filter((row) => allowedValues.has(row[key]));
+          const column = columns.find((item) => item.key === key);
+          const dateColumn = isDateColumn(
+            key,
+            column?.label,
+            columnTypes[key] || column?.type,
+          );
+          result = result.filter((row) => {
+            const value = dateColumn
+              ? normalizeDateFilterValue(row[key]) || "undefined"
+              : row[key] == null || row[key] === ""
+                ? "undefined"
+                : String(row[key]);
+            return allowedValues.has(value);
+          });
         }
       });
 
@@ -1162,10 +1194,14 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
             return sortConfig.direction === "asc" ? aNum - bNum : bNum - aNum;
           }
 
-          if (type === "date" && aVal instanceof Date && bVal instanceof Date) {
-            return sortConfig.direction === "asc"
-              ? aVal.getTime() - bVal.getTime()
-              : bVal.getTime() - aVal.getTime();
+          if (type === "date" || isDateColumn(sortConfig.key, col?.label, type)) {
+            const aDate = parseAnyDate(aVal);
+            const bDate = parseAnyDate(bVal);
+            if (aDate && bDate) {
+              return sortConfig.direction === "asc"
+                ? aDate.getTime() - bDate.getTime()
+                : bDate.getTime() - aDate.getTime();
+            }
           }
 
           const aStr = String(aVal).toLowerCase();

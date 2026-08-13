@@ -18,10 +18,6 @@ export function Dashboard() {
   const navigate = useNavigate();
 
   const handleNavigate = (path: string) => {
-    if (path === "/hold-dashboard") {
-      window.location.assign(path);
-      return;
-    }
     navigate(path);
   };
 

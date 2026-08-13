@@ -380,6 +380,9 @@ export function HoldAddDashboard() {
       const nextSavedRows = prev.SavedRows_HoldAdd
         ? JSON.parse(JSON.stringify(prev.SavedRows_HoldAdd))
         : {};
+      const nextSavedRowsMeta = prev.SavedRows_HoldAdd_Meta
+        ? JSON.parse(JSON.stringify(prev.SavedRows_HoldAdd_Meta))
+        : {};
 
       const currentMonthVal = appData.globalMonth || "03.2026";
       const currentMonthNum = parseInt(currentMonthVal.split(".")[0], 10) || 3;
@@ -396,6 +399,7 @@ export function HoldAddDashboard() {
       variations.forEach((v) => {
         delete nextSavedPeriods[v];
         delete nextSavedRows[v];
+        delete nextSavedRowsMeta[v];
       });
 
       const nextMonthStr = getNextMonthStr(currentPeriod);
@@ -421,6 +425,7 @@ export function HoldAddDashboard() {
         SavedBal_PayrollTrial: nextSavedAll,
         SavedPeriods_HoldAdd: nextSavedPeriods,
         SavedRows_HoldAdd: nextSavedRows,
+        SavedRows_HoldAdd_Meta: nextSavedRowsMeta,
       };
     });
     toast.success(`Đã xóa dữ liệu đã lưu ${currentPeriod}!`);
@@ -1343,14 +1348,20 @@ export function HoldAddDashboard() {
       return `${month}.${match[2]}`;
     };
 
-    const autoOpenBal: Record<string, Record<string, number>> = {};
+    const openingMovements: Record<string, Record<string, number>> = {};
     Object.values(testBuStats).forEach((s) => {
-      const isPastMonth = getMonthNum(s.displayMonth) < getMonthNum(s.month);
+      const sourceMonth = s.displayMonth || s.month;
+      const isPastMonth = getMonthNum(sourceMonth) < getMonthNum(s.month);
       if (isPastMonth) {
-        const totalPastAmount = Math.abs(s.rawAdd || 0) + Math.abs(s.rawHold || 0) + Math.abs(s.rawCancel || 0);
-        if (totalPastAmount > 0) {
-          if (!autoOpenBal[s.bu]) autoOpenBal[s.bu] = {};
-          autoOpenBal[s.bu][s.displayMonth] = (autoOpenBal[s.bu][s.displayMonth] || 0) + totalPastAmount;
+        const id = String(s.id).toLowerCase();
+        let movement = 0;
+        if (id.includes("_hold")) movement = Math.abs(s.rawHold || 0);
+        if (id.includes("_add")) movement = -Math.abs(s.rawAdd || 0);
+        if (id.includes("_cancel")) movement = -Math.abs(s.rawCancel || 0);
+        if (movement !== 0) {
+          if (!openingMovements[s.bu]) openingMovements[s.bu] = {};
+          openingMovements[s.bu][sourceMonth] =
+            (openingMovements[s.bu][sourceMonth] || 0) + movement;
         }
       }
     });
@@ -1358,10 +1369,16 @@ export function HoldAddDashboard() {
     const savedOpeningByBu = appData.SavedBal_PayrollTrial?.[currentPeriod] || {};
     const finalOpenBal: Record<string, Record<string, number>> = {};
 
-    Object.entries(autoOpenBal).forEach(([bu, months]) => {
+    // Live Transaction history is authoritative whenever it contains a
+    // movement for the BU/source month. This prevents an already-saved HOLD
+    // from being added twice and lets a later CANCEL reduce it to zero.
+    Object.entries(openingMovements).forEach(([bu, months]) => {
       if (!finalOpenBal[bu]) finalOpenBal[bu] = {};
-      Object.entries(months).forEach(([m, amt]) => {
-        finalOpenBal[bu][m] = amt;
+      Object.entries(months).forEach(([sourceMonth, movement]) => {
+        const outstandingAmount = Math.max(0, movement);
+        if (outstandingAmount >= 1) {
+          finalOpenBal[bu][sourceMonth] = outstandingAmount;
+        }
       });
     });
 
@@ -1369,6 +1386,14 @@ export function HoldAddDashboard() {
       if (!finalOpenBal[bu]) finalOpenBal[bu] = {};
       const openBalByMonth = savedData?.openBalByMonth || {};
       Object.entries(openBalByMonth).forEach(([sourceMonth, amountRaw]) => {
+        if (
+          Object.prototype.hasOwnProperty.call(
+            openingMovements[bu] || {},
+            sourceMonth,
+          )
+        ) {
+          return;
+        }
         const amount = Math.abs(Number(amountRaw) || 0);
         if (amount > 0) {
           const displayMonth = sourceMonth === "general" ? currentPeriod : sourceMonth;
@@ -1579,6 +1604,8 @@ export function HoldAddDashboard() {
     // Snapshot substitution & Frozen approval logic
     const savedPeriods = appData.SavedPeriods_HoldAdd || {};
     const savedRowsMap = appData.SavedRows_HoldAdd || {};
+    const savedRowsMeta = appData.SavedRows_HoldAdd_Meta || {};
+    const transactionVersions = appData.TrialBalanceTransactionVersions || {};
     const finalRows: typeof processedResult = [];
 
     // Group the raw computed result rows by reporting month to align snapshot and live data
@@ -1599,8 +1626,12 @@ export function HoldAddDashboard() {
     allMonths.forEach((m) => {
       const isSaved = !!savedPeriods[m];
       const live = resultMap.get(m) || [];
+      const snapshotVersion = savedRowsMeta[m]?.transactionVersion || 0;
+      const requiredTransactionVersion = transactionVersions[m] || 0;
+      const snapshotIsCurrent =
+        snapshotVersion >= requiredTransactionVersion;
 
-      if (isSaved && savedRowsMap[m]) {
+      if (isSaved && savedRowsMap[m] && snapshotIsCurrent) {
         const snap = savedRowsMap[m];
 
         // Return exactly the state of Hold, Add, Cancel from the snapshot
@@ -1676,7 +1707,13 @@ export function HoldAddDashboard() {
       return 0;
     });
   }, [
-    appData,
+    appData.Sheet1_AE?.data,
+    appData.Hold_AE?.data,
+    appData.SavedBal_PayrollTrial,
+    appData.SavedPeriods_HoldAdd,
+    appData.SavedRows_HoldAdd,
+    appData.SavedRows_HoldAdd_Meta,
+    appData.TrialBalanceTransactionVersions,
     currentPeriod,
     confirmedIds,
     currentPeriodNum,
@@ -1762,12 +1799,26 @@ export function HoldAddDashboard() {
 
         rowsForBu.forEach((r) => {
           const isHold = String(r.id).includes("_hold");
+          const isAdd = String(r.id).includes("_add");
+          const isCancel = String(r.id).includes("_cancel");
           const dMonth = r.displayMonth || r.month;
 
           if (isHold) {
             const amt = !r._excludeFromTotals ? r.chi + r.hold : 0;
             if (amt > 0) {
               nextOpenBalByMonth[dMonth] = (nextOpenBalByMonth[dMonth] || 0) + amt;
+            }
+          } else if (isAdd || isCancel) {
+            const releasedAmount = isCancel
+              ? Math.abs(r.rawCancel || r.cancel || r.chi || 0)
+              : Math.abs(r.rawAdd || r.add || r.thu || 0);
+            if (releasedAmount > 0) {
+              const remaining = Math.max(
+                0,
+                (nextOpenBalByMonth[dMonth] || 0) - releasedAmount,
+              );
+              if (remaining < 1) delete nextOpenBalByMonth[dMonth];
+              else nextOpenBalByMonth[dMonth] = remaining;
             }
           }
         });
@@ -1813,11 +1864,21 @@ export function HoldAddDashboard() {
         : {};
       nextSavedRows[currentPeriod] = snapshotRows;
 
+      const nextSavedRowsMeta = prev.SavedRows_HoldAdd_Meta
+        ? JSON.parse(JSON.stringify(prev.SavedRows_HoldAdd_Meta))
+        : {};
+      nextSavedRowsMeta[currentPeriod] = {
+        transactionVersion:
+          prev.TrialBalanceTransactionVersions?.[currentPeriod] || 0,
+        savedAt: new Date().toISOString(),
+      };
+
       return {
         ...prev,
         SavedBal_PayrollTrial: nextSavedAll,
         SavedPeriods_HoldAdd: nextSavedPeriods,
         SavedRows_HoldAdd: nextSavedRows,
+        SavedRows_HoldAdd_Meta: nextSavedRowsMeta,
       };
     });
     toast.success("Đã lưu dữ liệu: Chuyển Lương sang SDĐK kỳ sau!");
@@ -1952,7 +2013,7 @@ export function HoldAddDashboard() {
     });
 
     return balances;
-  }, [grouped, appData, getMonthNum]);
+  }, [grouped, appData.SavedBal_PayrollTrial, getMonthNum]);
 
   const computedMonthTotals = useMemo(() => {
     const totals: Record<

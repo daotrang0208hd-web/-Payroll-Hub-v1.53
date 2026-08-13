@@ -78,6 +78,20 @@ export interface AppData {
   SavedBal_PayrollTrial?: Record<string, any>;
   SavedPeriods_HoldAdd?: Record<string, boolean>;
   SavedRows_HoldAdd?: Record<string, any[] | undefined>;
+  SavedRows_HoldAdd_Meta?: Record<
+    string,
+    { transactionVersion: number; savedAt: string }
+  >;
+  TransactionActivity?: {
+    generatedAt?: string;
+    lastSavedAt?: string;
+    editCount: number;
+    saveVersion: number;
+    lastAction: "generated" | "saved";
+  };
+  TrialBalanceTransactionVersion?: number;
+  TrialBalanceTransactionVersions?: Record<string, number>;
+  TrialBalanceRefreshedAt?: string;
   ConfirmedIds_HoldAdd?: string[];
   Timesheet_RosterEditHistory?: any[];
 }

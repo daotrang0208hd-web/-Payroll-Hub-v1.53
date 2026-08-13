@@ -98,7 +98,7 @@ const parseExcelInWorker = async (
   options: { fileId?: string; mode?: ExcelParseMode } = {},
 ): Promise<ExcelParseResult> => {
   const { buffer, name } = await getExcelFileBuffer(file);
-  const requestId = crypto.randomUUID();
+  const requestId = generateUUID();
   const worker = getExcelWorker();
 
   return new Promise((resolve, reject) => {
@@ -1128,7 +1128,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       />
 
       <div 
-        className="bg-card flex-1 flex flex-col min-h-0 w-full relative border-border rounded-none border-[0.5px]"
+        className="bg-card flex-1 flex flex-col min-h-0 w-full relative overflow-hidden border border-border rounded-xl shadow-sm"
         style={{ paddingLeft: "0px", paddingTop: "0px", paddingBottom: "0px", paddingRight: "0px" }}
       >
         <div className="absolute inset-0 bg-accent/5 opacity-[0.05] pointer-events-none hidden" />
@@ -1299,7 +1299,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         {/* Service Account Info Card removed as requested */}
 
 
-        <div className="flex-1 flex flex-col min-h-0 relative rounded-none overflow-hidden p-0">
+        <div className="flex-1 flex flex-col min-h-0 relative overflow-hidden p-0">
           <TimesheetInputTable
             rows={inputRows}
             onAddRow={handleAddRow}

@@ -181,10 +181,93 @@ export function formatIdNumber(id: unknown): string {
 export function prepareDataForExport(data: any[]): any[] {
   return data;
 }
-export function parseAnyDate(dateStr: string): Date | null {
-  if (!dateStr) return null;
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? null : d;
+export function parseAnyDate(value: unknown, preferredYear?: number): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : new Date(value.getTime());
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Excel serial date (1900 date system). Day-only headers are resolved by
+    // their owning import flow instead of being treated as serial dates.
+    if (value > 59 && value < 100000) {
+      const excelEpoch = Date.UTC(1899, 11, 30);
+      const parsed = new Date(excelEpoch + value * 86400000);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+    return null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // Recover Date objects serialized by the legacy roster mapper as
+  // "undefined/undefined/Mon Jun 01 2026 ...". Existing browser data may
+  // retain that shape even after the importer is upgraded.
+  const legacyDateTail = raw.match(/^undefined\/undefined\/(.+)$/i);
+  if (legacyDateTail) {
+    const recovered = new Date(legacyDateTail[1]);
+    return isNaN(recovered.getTime()) ? null : recovered;
+  }
+
+  if (/(?:^|[/\s])undefined(?:$|[/\s])/i.test(raw)) return null;
+
+  const dmy = raw.match(/^(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2}|\d{4}))$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    let year = Number(dmy[3]);
+    if (year < 100) year += 2000;
+    const parsed = new Date(year, month - 1, day);
+    return parsed.getFullYear() === year &&
+      parsed.getMonth() === month - 1 &&
+      parsed.getDate() === day
+      ? parsed
+      : null;
+  }
+
+  const dayOnly = raw.match(/^(\d{1,2})$/);
+  if (dayOnly && preferredYear) return null;
+
+  const parsed = new Date(raw);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function isDateColumn(columnKey?: unknown, columnLabel?: unknown, type?: unknown): boolean {
+  if (type === "date") return true;
+  const normalized = removeVietnameseTones(
+    `${String(columnKey || "")} ${String(columnLabel || "")}`,
+  )
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  return /(^| )(date|ngay|full date|session date)( |$)/.test(normalized);
+}
+
+export function normalizeDateFilterValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "";
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  const isRecoverableLegacyDate = /^undefined\/undefined\//i.test(raw);
+  if (!isRecoverableLegacyDate && /undefined|null|invalid date/i.test(raw)) {
+    return "";
+  }
+
+  // Preserve the calendar day encoded by Excel/worker ISO strings. Formatting
+  // an ISO midnight through the runtime timezone can otherwise shift it to the
+  // previous day in the filter menu.
+  const isoDate = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:T|$)/);
+  if (isoDate) return `${isoDate[3]}/${isoDate[2]}/${isoDate[1]}`;
+
+  const parsed = parseAnyDate(value);
+  if (!parsed) return raw;
+  return parsed.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Bangkok",
+  });
 }
 const normalizedRowKeyCache = new WeakMap<object, Map<string, string>>();
 
