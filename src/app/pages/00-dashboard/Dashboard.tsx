@@ -17,6 +17,14 @@ import {
 export function Dashboard() {
   const navigate = useNavigate();
 
+  const handleNavigate = (path: string) => {
+    if (path === "/hold-dashboard") {
+      window.location.assign(path);
+      return;
+    }
+    navigate(path);
+  };
+
   const [hiddenCards, setHiddenCards] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem("dashboard_hidden_cards");
@@ -118,7 +126,7 @@ export function Dashboard() {
               {visibleCards.map((c) => (
                 <div
                   key={c.path}
-                  onClick={() => navigate(c.path)}
+                  onClick={() => handleNavigate(c.path)}
                   className="group relative bg-white border border-slate-200/90 hover:border-amber-500/50 rounded-2xl p-5 sm:p-6 transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[160px]"
                 >
                   {/* Card Action Buttons */}

@@ -239,6 +239,7 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
                   <Link
                     key={item.id}
                     to={item.path}
+                    reloadDocument={item.path === "/hold-dashboard"}
                     className={`font-sans lowercase font-bold tracking-[0.1em] text-primary no-underline relative transition-opacity outline-none focus:outline-none focus-visible:outline-none ${
                       isActive ? "opacity-100 after:content-[''] after:absolute after:-bottom-[6px] after:left-0 after:w-full after:h-[1.5px] after:bg-primary" : "opacity-40 hover:opacity-100"
                     }`}

@@ -131,6 +131,7 @@ export function LeftSidebar({
               <TooltipTrigger asChild>
                 <Link
                   to={item.to}
+                  reloadDocument={item.to === "/hold-dashboard"}
                   style={{ width: "56px", height: "56px" }}
                   className={`relative flex items-center justify-center rounded-2xl transition-all duration-300 group ${
                     isActive

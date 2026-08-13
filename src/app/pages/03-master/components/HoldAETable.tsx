@@ -78,6 +78,17 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
   ({ searchTerm, onSearchTermChange, onAddRow, cameFromBulkPayment, onBackToBulkPayment }, ref) => {
     const { appData, updateAppData } = useAppData();
     const [showSearch, setShowSearch] = React.useState(false);
+    const hasActiveSearch = searchTerm.trim().length > 0;
+    const isSearchVisible = showSearch || hasActiveSearch;
+
+    const handleToggleSearch = () => {
+      if (isSearchVisible) {
+        setShowSearch(false);
+        onSearchTermChange?.("");
+        return;
+      }
+      setShowSearch(true);
+    };
 
     // 1. Month range parser and validator
     const parseToMonthIndex = useCallback(
@@ -616,7 +627,7 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
             </div>
             <div className="min-w-0">
               <h3 className="truncate text-[14px] font-bold leading-5 tracking-tight text-foreground">
-                DEDUCTIONS
+                DEDUCTIONS AND BENEFITS
               </h3>
               <p className="truncate text-[9px] font-medium leading-3.5 text-muted-foreground">
                 Theo dõi Hold, Cancel, Bonus và Add · {filteredData.data.length} dòng
@@ -637,10 +648,10 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
             )}
             
             {/* Search Input shown dynamically */}
-            {showSearch && (
+            {isSearchVisible && (
               <div 
                 className="flex h-8 items-center gap-2 rounded-full border border-border bg-card px-3 text-xs shadow-sm transition-all focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15 animate-in fade-in slide-in-from-right duration-200"
-                style={{ width: "220px" }}
+                style={{ width: "clamp(220px, 30vw, 360px)" }}
               >
                 <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <input
@@ -706,12 +717,12 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
                 <DropdownMenuSeparator className="bg-slate-50" />
                 
                 <DropdownMenuItem
-                  onClick={() => setShowSearch((prev) => !prev)}
+                  onClick={handleToggleSearch}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors"
                 >
                   <Search className="w-4 h-4 text-primary" />
                   <span className="text-xs font-bold text-slate-700">
-                    {showSearch ? "Ẩn công cụ tìm kiếm" : "Tìm kiếm..."}
+                    {isSearchVisible ? "Ẩn công cụ tìm kiếm" : "Tìm kiếm..."}
                   </span>
                 </DropdownMenuItem>
                 {onAddRow && (

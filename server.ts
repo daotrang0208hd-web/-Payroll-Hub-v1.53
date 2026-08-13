@@ -82,7 +82,19 @@ async function getGoogleAuth(scopes: string[]) {
 }
 
 const app = express();
-const PORT = 3000;
+
+function resolveServerPort(): number {
+  const portArgIndex = process.argv.findIndex((arg) => arg === "--port");
+  const cliPort = portArgIndex >= 0 ? Number(process.argv[portArgIndex + 1]) : NaN;
+  if (Number.isInteger(cliPort) && cliPort > 0) return cliPort;
+
+  const configuredPort = Number(process.env.PORT);
+  if (Number.isInteger(configuredPort) && configuredPort > 0) return configuredPort;
+
+  return 3000;
+}
+
+const SERVER_PORT = resolveServerPort();
 
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -543,7 +555,8 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { 
-        middlewareMode: true
+        middlewareMode: true,
+        allowedHosts: ["terminal.local"],
       },
       appType: "spa",
     });
@@ -565,8 +578,8 @@ async function startServer() {
     });
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  server.listen(SERVER_PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${SERVER_PORT}`);
   });
 }
 
@@ -577,4 +590,3 @@ if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
 }
 
 export default app;
-
