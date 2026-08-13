@@ -2,34 +2,7 @@ import { useState, useCallback } from "react";
 import { useAppData } from "../lib/contexts/AppDataContext";
 import { toast } from "sonner";
 import { getCenterInfoByAECode, resolveMktAndCenterL07 } from "../lib/utils/center-utils";
-import { parseMoneyToNumber, removeVietnameseTones } from "../lib/utils/data-utils";
-
-function cleanIDNumber(val: unknown): string {
-  if (val === undefined || val === null) return "";
-  let str = String(val).trim();
-  if (typeof val === "number") {
-    if (str.includes("E") || str.includes("e") || str.includes("+")) {
-      str = val.toLocaleString("fullwide", { useGrouping: false });
-    }
-    if (str.includes(".")) {
-      str = str.split(".")[0];
-    }
-  } else {
-    if (str.includes("E") || str.includes("e")) {
-      const num = Number(str);
-      if (!isNaN(num)) {
-        str = num.toLocaleString("fullwide", { useGrouping: false });
-      }
-    }
-    if (str.includes(".")) {
-      const parts = str.split(".");
-      if (parts[1] === "0" || parts[1] === "00" || /^[0]+$/.test(parts[1])) {
-        str = parts[0];
-      }
-    }
-  }
-  return str;
-}
+import { formatIdNumber, parseMoneyToNumber, removeVietnameseTones } from "../lib/utils/data-utils";
 
 function cleanFullName(val: unknown): string {
   if (val === undefined || val === null) return "";
@@ -144,7 +117,7 @@ export function useMasterAELogic() {
         let finalValue = value;
         const colKeyUpper = String(columnKey || "").toUpperCase();
         if (colKeyUpper.includes("ID NUMBER") || colKeyUpper === "ID" || colKeyUpper === "CCCD" || colKeyUpper === "MÃ AE") {
-          finalValue = cleanIDNumber(value);
+          finalValue = formatIdNumber(value);
         } else if (
           colKeyUpper.includes("FULL NAME") ||
           colKeyUpper.includes("BENEFICIARY NAME") ||

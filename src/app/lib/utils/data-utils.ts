@@ -153,8 +153,30 @@ export function isChargeAmountColumn(columnKey: string): boolean {
     normalized.includes("EXTRA SUMMER INSTRUCTORS")
   );
 }
-export function formatIdNumber(id: any): string {
-  return String(id || '').trim();
+export function formatIdNumber(id: unknown): string {
+  if (id === undefined || id === null || id === "") return "";
+
+  let normalized = String(id).trim().replace(/[\s\u00a0]/g, "");
+
+  // Excel can expose an ID as scientific notation or as a decimal ending in
+  // zero. Convert those forms back to their integer representation first.
+  if (/^[+]?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(normalized)) {
+    const numericId = Number(normalized);
+    if (Number.isSafeInteger(numericId) && numericId >= 0) {
+      normalized = numericId.toLocaleString("fullwide", {
+        useGrouping: false,
+        maximumFractionDigits: 0,
+      });
+    }
+  } else if (/^\d+\.0+$/.test(normalized)) {
+    normalized = normalized.replace(/\.0+$/, "");
+  } else if (/^\+\d+$/.test(normalized)) {
+    normalized = normalized.slice(1);
+  }
+
+  return /^\d+$/.test(normalized) && normalized.length < 12
+    ? normalized.padStart(12, "0")
+    : normalized;
 }
 export function prepareDataForExport(data: any[]): any[] {
   return data;

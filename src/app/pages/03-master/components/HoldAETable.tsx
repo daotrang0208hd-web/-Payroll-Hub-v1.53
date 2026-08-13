@@ -17,6 +17,7 @@ import {
 import {
   parseMoneyToNumber,
   removeVietnameseTones,
+  formatIdNumber,
   isChargeAmountColumn,
   isNonSummableTextColumn,
 } from "../../../lib/utils/data-utils";
@@ -32,33 +33,6 @@ const HOLD_HIDDEN_COLS = [
   "TRẠNG THÁI",
   "DIỄN GIẢI"
 ];
-
-function cleanIDNumber(val: unknown): string {
-  if (val === undefined || val === null) return "";
-  let str = String(val).trim();
-  if (typeof val === "number") {
-    if (str.includes("E") || str.includes("e") || str.includes("+")) {
-      str = val.toLocaleString("fullwide", { useGrouping: false });
-    }
-    if (str.includes(".")) {
-      str = str.split(".")[0];
-    }
-  } else {
-    if (str.includes("E") || str.includes("e")) {
-      const num = Number(str);
-      if (!isNaN(num)) {
-        str = num.toLocaleString("fullwide", { useGrouping: false });
-      }
-    }
-    if (str.includes(".")) {
-      const parts = str.split(".");
-      if (parts[1] === "0" || parts[1] === "00" || /^[0]+$/.test(parts[1])) {
-        str = parts[0];
-      }
-    }
-  }
-  return str;
-}
 
 function cleanFullName(val: unknown): string {
   if (val === undefined || val === null) return "";
@@ -144,24 +118,29 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
         const rowLimit = parseToMonthIndex(rowMonth);
         return rowLimit === currentLimit;
       }).map((row: any) => {
+        const normalizedRow = {
+          ...row,
+          "ID Number": formatIdNumber(row["ID Number"]),
+        };
+
         // Enforce default total payment sign when Reporting Month equals Arising Month
-        const rowReportingMonth = String(row["Tháng báo cáo"] || "").trim();
-        const rowArisingMonth = String(row["Tháng phát sinh"] || "").trim();
+        const rowReportingMonth = String(normalizedRow["Tháng báo cáo"] || "").trim();
+        const rowArisingMonth = String(normalizedRow["Tháng phát sinh"] || "").trim();
         if (rowReportingMonth && rowArisingMonth && rowReportingMonth === rowArisingMonth) {
-          const nghiepVu = String(row["Nghiệp vụ"] || "").toUpperCase().trim();
-          const currentTotalPayment = parseMoneyToNumber(row["TOTAL PAYMENT"] || 0);
+          const nghiepVu = String(normalizedRow["Nghiệp vụ"] || "").toUpperCase().trim();
+          const currentTotalPayment = parseMoneyToNumber(normalizedRow["TOTAL PAYMENT"] || 0);
           
           if (nghiepVu.includes("HOLD") || nghiepVu === "H") {
-            row["TOTAL PAYMENT"] = -Math.abs(currentTotalPayment);
+            normalizedRow["TOTAL PAYMENT"] = -Math.abs(currentTotalPayment);
           } else if (nghiepVu.includes("CANCEL") || nghiepVu === "C") {
-            row["TOTAL PAYMENT"] = -Math.abs(currentTotalPayment);
+            normalizedRow["TOTAL PAYMENT"] = -Math.abs(currentTotalPayment);
           } else if (nghiepVu.includes("ADD") || nghiepVu === "A" || nghiepVu === "") {
-            row["TOTAL PAYMENT"] = Math.abs(currentTotalPayment);
+            normalizedRow["TOTAL PAYMENT"] = Math.abs(currentTotalPayment);
           } else if (nghiepVu === "B" || nghiepVu.includes("BONUS") || nghiepVu === "⏩" || nghiepVu === "⏯") {
-            row["TOTAL PAYMENT"] = Math.abs(currentTotalPayment);
+            normalizedRow["TOTAL PAYMENT"] = Math.abs(currentTotalPayment);
           }
         }
-        return row;
+        return normalizedRow;
       });
 
       return { ...raw, data: filteredRows };
@@ -225,7 +204,7 @@ export const HoldAETable = forwardRef<any, HoldAETableProps>(
           let finalValue = value;
           const colKeyUpper = String(columnKey || "").toUpperCase();
           if (colKeyUpper.includes("ID NUMBER") || colKeyUpper === "ID" || colKeyUpper === "CCCD" || colKeyUpper === "MÃ AE") {
-            finalValue = cleanIDNumber(value);
+            finalValue = formatIdNumber(value);
           } else if (
             colKeyUpper.includes("FULL NAME") ||
             colKeyUpper.includes("BENEFICIARY NAME") ||
