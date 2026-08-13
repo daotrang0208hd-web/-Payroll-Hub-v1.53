@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import { Root } from "./pages/Root";
+import { HoldDashboardPage } from "./pages/04-balance/HoldDashboardPage";
 
 export const router = createBrowserRouter([
   {
@@ -31,9 +32,7 @@ export const router = createBrowserRouter([
       },
       {
         path: "hold-dashboard",
-        lazy: async () => ({
-          Component: (await import("./pages/04-balance/HoldDashboardPage")).HoldDashboardPage,
-        }),
+        Component: HoldDashboardPage,
       },
       {
         path: "audit",

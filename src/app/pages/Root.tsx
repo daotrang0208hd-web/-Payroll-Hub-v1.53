@@ -42,7 +42,7 @@ export function Root() {
         </div>
 
         <main className="flex-1 flex flex-col min-h-0 relative">
-          <ErrorBoundary>
+          <ErrorBoundary key={location.pathname}>
             <div className="flex-1 flex flex-col min-h-0">
               <Outlet />
             </div>
