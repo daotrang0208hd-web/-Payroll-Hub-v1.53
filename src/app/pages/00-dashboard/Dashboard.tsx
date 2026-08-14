@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { 
   Database, 
   CreditCard, 
@@ -16,10 +16,6 @@ import {
 
 export function Dashboard() {
   const navigate = useNavigate();
-
-  const handleNavigate = (path: string) => {
-    navigate(path);
-  };
 
   const [hiddenCards, setHiddenCards] = useState<string[]>(() => {
     try {
@@ -122,11 +118,17 @@ export function Dashboard() {
               {visibleCards.map((c) => (
                 <div
                   key={c.path}
-                  onClick={() => handleNavigate(c.path)}
                   className="group relative bg-white border border-slate-200/90 hover:border-amber-500/50 rounded-2xl p-5 sm:p-6 transition-all duration-200 shadow-2xs hover:shadow-md cursor-pointer flex flex-col justify-between min-h-[160px]"
                 >
+                  <Link
+                    to={c.path}
+                    reloadDocument={c.path === "/hold-dashboard"}
+                    aria-label={`Mở ${c.title}`}
+                    className="absolute inset-0 z-0 rounded-2xl"
+                  />
+
                   {/* Card Action Buttons */}
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="relative z-[1] pointer-events-none flex items-center justify-between mb-4">
                     <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200/60 flex items-center justify-center transition-transform group-hover:scale-105">
                       {c.icon}
                     </div>
@@ -134,14 +136,14 @@ export function Dashboard() {
                     <button
                       onClick={(e) => toggleCardVisibility(c.path, e)}
                       title="Ẩn thẻ này"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer opacity-80 group-hover:opacity-100"
+                      className="relative z-10 pointer-events-auto p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer opacity-80 group-hover:opacity-100"
                     >
                       <EyeOff className="w-4 h-4" />
                     </button>
                   </div>
 
                   {/* Card Content */}
-                  <div>
+                  <div className="relative z-[1] pointer-events-none">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 group-hover:text-amber-800 transition-colors">
                         {c.title}

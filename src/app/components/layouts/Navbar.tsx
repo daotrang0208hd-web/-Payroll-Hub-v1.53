@@ -31,7 +31,6 @@ import { motion } from "motion/react";
 import { useState, useEffect } from "react";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import { TableData } from "../../types";
-import { loadHoldDashboardPage } from "../../lib/lazy-routes";
 import { MonthPicker } from "../shared/MonthPicker";
 import { toast } from "sonner";
 import {
@@ -84,22 +83,6 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
   const [activeTabLabel, setActiveTabLabel] = useState(() => {
     return sessionStorage.getItem("active_timesheet_tab_label") || "Total Paid Hours";
   });
-
-  useEffect(() => {
-    const preload = () => void loadHoldDashboardPage();
-    const browserWindow = window as typeof window & {
-      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-
-    if (browserWindow.requestIdleCallback) {
-      const handle = browserWindow.requestIdleCallback(preload, { timeout: 1500 });
-      return () => browserWindow.cancelIdleCallback?.(handle);
-    }
-
-    const handle = window.setTimeout(preload, 500);
-    return () => window.clearTimeout(handle);
-  }, []);
 
   useEffect(() => {
     const handleTabChange = (e: Event) => {
@@ -256,8 +239,7 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
                   <Link
                     key={item.id}
                     to={item.path}
-                    onMouseEnter={item.id === "hold-dashboard" ? () => void loadHoldDashboardPage() : undefined}
-                    onFocus={item.id === "hold-dashboard" ? () => void loadHoldDashboardPage() : undefined}
+                    reloadDocument={item.id === "hold-dashboard"}
                     className={`font-sans lowercase font-bold tracking-[0.1em] text-primary no-underline relative transition-opacity outline-none focus:outline-none focus-visible:outline-none ${
                       isActive ? "opacity-100 after:content-[''] after:absolute after:-bottom-[6px] after:left-0 after:w-full after:h-[1.5px] after:bg-primary" : "opacity-40 hover:opacity-100"
                     }`}
