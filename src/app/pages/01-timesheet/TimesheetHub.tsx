@@ -3,7 +3,7 @@ import React, { useMemo, useRef, useState, useEffect, useTransition, useCallback
 import { useLocation } from "react-router";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import { useTimesheetCalculations } from "../../hooks/useTimesheetCalculations";
-import { prepareDataForExport } from "../../lib/utils/data-utils";
+import { normalizeDateFilterValue, prepareDataForExport } from "../../lib/utils/data-utils";
 import { useUiSettings } from "../../lib/ui-settings";
 import { INITIAL_APP_DATA } from "../../constants/initial-data";
 import {
@@ -295,6 +295,15 @@ function EditableDateSelector({
 
 const timesheetSearchCache = new WeakMap<any, string>();
 
+const normalizeFilterText = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/đ/g, "d")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "");
+
 let hasFetchedSupabase = false;
 
 async function fetchAllFromSupabaseTable(tableName: string) {
@@ -502,11 +511,13 @@ export function TimesheetHub() {
 
   const [targetDate, setTargetDate] = useState("");
   const [targetCenter, setTargetCenter] = useState("");
+  const [auditCascadeFilters, setAuditCascadeFilters] = useState<Record<string, string>>({});
 
   const handleClearFilters = useCallback(() => {
     setSearchTerm("");
     setTargetDate("");
     setTargetCenter("");
+    setAuditCascadeFilters({});
     setFromDate("");
     setToDate("");
     setDebouncedFromDate("");
@@ -532,6 +543,7 @@ export function TimesheetHub() {
       setDebouncedToDate("");
       setTargetDate("");
       setTargetCenter("");
+      setAuditCascadeFilters({});
     });
     updateAppData((prev) => ({
       ...prev,
@@ -548,7 +560,7 @@ export function TimesheetHub() {
     const timer = setTimeout(() => {
       setDebouncedFromDate(fromDate);
       setDebouncedToDate(toDate);
-    }, 500);
+    }, 180);
     return () => clearTimeout(timer);
   }, [fromDate, toDate]);
 
@@ -615,6 +627,7 @@ export function TimesheetHub() {
   }, [activeTab, view, tabs]);
 
   const mktLocalNorthData = useMemo(() => {
+    if (activeTab !== "center" && activeTab !== "mkt_local_north") return [];
     return processedRosterData.filter((r: any) => {
       const cUpper = String(r.center || "").toUpperCase();
       const l07Upper = String(r.l07 || "").toUpperCase();
@@ -622,7 +635,7 @@ export function TimesheetHub() {
       // Phải loại bỏ các ca trùng lịch (overlap) khỏi bảng Pivot
       return isMktNorth && !String(r.overlap_check || "").startsWith("Trùng lịch");
     });
-  }, [processedRosterData]);
+  }, [activeTab, processedRosterData]);
 
   const currentData = useMemo(() => {
     if (activeTab === "roster_raw") return processedRosterData;
@@ -632,72 +645,73 @@ export function TimesheetHub() {
     return [];
   }, [activeTab, processedRosterData, employeeSummary, centerSummary, mktLocalNorthData]);
 
+  const rosterMetrics = useMemo(() => {
+    let unpaidRows = 0;
+    let totalDuration = 0;
+    for (const row of calculatedRosterData) {
+      if (row.loai === "KL") unpaidRows += 1;
+      totalDuration += Number(row.duration) || 0;
+    }
+    return { unpaidRows, totalDuration };
+  }, [calculatedRosterData]);
+
   const searchData = useMemo(() => {
     let data = currentData;
 
-    // 1. If we have a target date (from audit or manually set), filter by date first
-    if (targetDate) {
-      const parseNormalizedDateStr = (str: string) => {
-        if (!str) return "";
-        const clean = str.trim();
-        if (clean.includes("/")) {
-          const p = clean.split("/");
-          if (p.length === 3) {
-            return `${p[2]}-${p[1].padStart(2, "0")}-${p[0].padStart(2, "0")}`;
-          }
-        }
-        if (clean.includes("-")) {
-          const p = clean.split("-");
-          if (p.length === 3) {
-            return `${p[0]}-${p[1].padStart(2, "0")}-${p[2].padStart(2, "0")}`;
-          }
-        }
-        return clean;
-      };
-
-      const normTargetDate = parseNormalizedDateStr(targetDate);
+    const cascadeEntries = Object.entries(auditCascadeFilters).filter(([, value]) => value);
+    if (targetDate || targetCenter || cascadeEntries.length > 0) {
+      const normalizedTargetDate = normalizeDateFilterValue(targetDate);
+      const normalizedTargetCenter = normalizeFilterText(targetCenter);
 
       data = data.filter((row: any) => {
-        const rowDate = String(row.date || row.ngay || "").trim();
-        if (!rowDate) return true; // Do not filter out rows with no date info
-        
-        const normRowDate = parseNormalizedDateStr(rowDate);
-        return normRowDate === normTargetDate || normRowDate.includes(normTargetDate);
+        const rowDate = normalizeDateFilterValue(row.ngay ?? row.date);
+        // Prefer the canonical L07. `center` can contain a short/raw code such
+        // as HN1, which previously caused an Audit L07 filter to return 0 rows.
+        const rowCenter = normalizeFilterText(row.l07 ?? row.center);
+
+        if (normalizedTargetDate && rowDate !== normalizedTargetDate) return false;
+        if (normalizedTargetCenter && rowCenter !== normalizedTargetCenter) return false;
+
+        for (const [key, expected] of cascadeEntries) {
+          if (key === "ngay" || key === "date") {
+            if (rowDate !== normalizeDateFilterValue(expected)) return false;
+            continue;
+          }
+          if (key === "l07" || key === "center") {
+            if (rowCenter !== normalizeFilterText(expected)) return false;
+            continue;
+          }
+          if (key === "class") {
+            if (normalizeFilterText(row.class ?? row.classCode) !== normalizeFilterText(expected)) return false;
+            continue;
+          }
+          if (key === "ma_nv") {
+            const actualId = normalizeFilterText(row.ma_nv ?? row.employeeId).replace(/^0+/, "");
+            const expectedId = normalizeFilterText(expected).replace(/^0+/, "");
+            if (actualId !== expectedId) return false;
+            continue;
+          }
+          if (key === "full_name") {
+            if (normalizeFilterText(row.full_name ?? row.fullName) !== normalizeFilterText(expected)) return false;
+            continue;
+          }
+          if (normalizeFilterText(row[key]) !== normalizeFilterText(expected)) return false;
+        }
+        return true;
       });
     }
 
-    // 2. If we have a target center (from audit), filter by center
-    if (targetCenter) {
-      data = data.filter((row: any) => {
-        const rowCenter = String(row.center || row.l07 || "")
-          .trim()
-          .toUpperCase();
-        if (!rowCenter) return true;
-        const tCenter = String(targetCenter).trim().toUpperCase();
-        return rowCenter === tCenter || rowCenter.includes(tCenter);
-      });
-    }
-
-    // 3. If we have a search term (class name, employee ID, full name)
     if (debouncedSearchTerm) {
-      const normalizeStr = (s: string) => {
-        if (!s) return "";
-        let normalized = s.toLowerCase();
-        normalized = normalized.replace(/đ/g, "d");
-        return normalized
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/\s+/g, "");
-      };
-
-      const lowerSearch = normalizeStr(debouncedSearchTerm);
+      const lowerSearch = normalizeFilterText(debouncedSearchTerm);
       const lowerSearchTrimmedZero = lowerSearch.replace(/^0+/, "");
 
       const searchCache = timesheetSearchCache;
 
       data = data.filter((row: any) => {
         // Use precomputed _searchStr if available
-        let rowSearchStr = searchCache.get(row);
+        let rowSearchStr = typeof row._searchStr === "string"
+          ? row._searchStr
+          : searchCache.get(row);
         
         if (rowSearchStr !== undefined) {
           if (rowSearchStr.includes(lowerSearch)) return true;
@@ -711,7 +725,7 @@ export function TimesheetHub() {
         for (const [key, value] of Object.entries(row)) {
           if (value == null) continue;
           if (typeof value === "string" || typeof value === "number") {
-            rowSearchStr += `|${normalizeStr(String(value))}`;
+            rowSearchStr += `|${normalizeFilterText(value)}`;
           }
         }
         
@@ -723,7 +737,7 @@ export function TimesheetHub() {
     }
 
     return data;
-  }, [currentData, debouncedSearchTerm, targetDate, targetCenter]);
+  }, [currentData, debouncedSearchTerm, targetDate, targetCenter, auditCascadeFilters]);
 
   // Handle deep linking and navigation resets
   useEffect(() => {
@@ -735,6 +749,7 @@ export function TimesheetHub() {
       const cascade = state.cascadeFilters as Record<string, string> | undefined;
 
       if (cascade && Object.keys(cascade).length > 0) {
+        setAuditCascadeFilters(cascade);
         // Set top bar control values
         if (cascade["l07"]) {
           setTargetCenter(cascade["l07"]);
@@ -756,25 +771,8 @@ export function TimesheetHub() {
         setSearchTerm("");
         setDebouncedSearchTerm("");
 
-        // Build multiFilters for tableRef
-        const multiFilters: Record<string, Set<any>> = {};
-        Object.entries(cascade).forEach(([colKey, val]) => {
-          if (val != null && val !== "") {
-            multiFilters[colKey] = new Set([String(val)]);
-          }
-        });
-
-        setTimeout(() => {
-          if (tableRef.current) {
-            if (tableRef.current.clearAllFilters) {
-              tableRef.current.clearAllFilters();
-            }
-            if (tableRef.current.setMultipleColumnFilters) {
-              tableRef.current.setMultipleColumnFilters(multiFilters);
-            }
-          }
-        }, 150);
       } else {
+        setAuditCascadeFilters({});
         const filterCol = state.filterColumn;
         const filterVal = state.filterValue;
 
@@ -809,19 +807,6 @@ export function TimesheetHub() {
           else setTargetCenter("");
         }
 
-        // Apply column filter directly on tableRef if available
-        if (filterCol && filterVal) {
-          setTimeout(() => {
-            if (tableRef.current) {
-              if (tableRef.current.clearAllFilters) {
-                tableRef.current.clearAllFilters();
-              }
-              if (tableRef.current.setColumnFilter) {
-                tableRef.current.setColumnFilter(filterCol, new Set([String(filterVal)]));
-              }
-            }
-          }, 150);
-        }
       }
 
       // Scroll to the table after a brief delay to ensure rendering
@@ -837,7 +822,7 @@ export function TimesheetHub() {
         state: { ...state, from: "audit_applied" },
       });
     }
-  }, [location.state, navigate, location.pathname, searchData]);
+  }, [location.state, navigate, location.pathname]);
 
   // Separate effect for clearing filters when navigating NOT from audit
   useEffect(() => {
@@ -1361,7 +1346,7 @@ export function TimesheetHub() {
                             </div>
                             <div className="bg-[rose] px-[0.8rem] py-[0.5rem] flex flex-col gap-1 rounded-sm" style={{ paddingTop: "0px", paddingBottom: "0px" }}>
                               <span className="text-[0.55rem] uppercase tracking-[0.1em] text-[foreground]/60 font-bold font-sans">Khong Luong</span>
-                              <span className="text-[1.2rem] font-sans font-extrabold text-[foreground]">{calculatedRosterData.filter(d => d.loai === "KL").length.toLocaleString('vi-VN')}</span>
+                              <span className="text-[1.2rem] font-sans font-extrabold text-[foreground]">{rosterMetrics.unpaidRows.toLocaleString('vi-VN')}</span>
                             </div>
                           </div>
                         </div>
@@ -1381,7 +1366,7 @@ export function TimesheetHub() {
                     <div className="stat-group" style={{ marginBottom: "0px" }}>
                       <span className="label" style={{ color: "#121d28" }}>Total Duration</span>
                       <div className="value" style={{ fontSize: "23px", lineHeight: "30px" }}>
-                        {calculatedRosterData.reduce((sum, r) => sum + (r.duration || 0), 0).toLocaleString('vi-VN')}
+                        {rosterMetrics.totalDuration.toLocaleString('vi-VN')}
                       </div>
                     </div>
                     <div className="stat-group" style={{ marginBottom: "0px", height: "44.9786px" }}>

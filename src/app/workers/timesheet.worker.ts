@@ -344,7 +344,10 @@ export function calculateTimesheet(params: any) {
       detailRow.chargeToCenterMkt = "HY0001.ECP";
     }
     const normalizeSearchStr = (s: string) => s ? s.toLowerCase().replace(/đ/g, "d").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "") : "";
-    (detailRow as any)._searchStr = normalizeSearchStr(`${detailRow.classCode} ${detailRow.fullName} ${detailRow.employeeId}`);
+    (detailRow as any)._searchStr = normalizeSearchStr(
+      `${detailRow.business} ${detailRow.l07} ${detailRow.center} ${detailRow.classCode} ` +
+      `${detailRow.fullName} ${detailRow.employeeId} ${detailRow.date} ${detailRow.taskType} ${detailRow.notes}`,
+    );
     details.push(detailRow);
   });
 
@@ -742,7 +745,9 @@ if (typeof window === "undefined" && typeof self !== "undefined") {
       "employeeSummary",
       "centerSummary",
     ] as const;
-    const chunkSize = 2_000;
+    // Larger batches materially reduce postMessage/structured-clone overhead
+    // on 50k-200k row Timesheet files while still keeping the UI responsive.
+    const chunkSize = 10_000;
 
     self.postMessage({
       type: "timesheet-result-start",

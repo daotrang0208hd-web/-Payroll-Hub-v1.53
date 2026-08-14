@@ -347,7 +347,12 @@ export function runAuditComputation(params: any) {
     if (dd !== undefined && dd !== "" && !isNaN(parseFloat(String(dd).replace(",", ".")))) { const pv = parseFloat(String(dd).replace(",", ".")); dur = pv > 0 && pv <= 1 && String(dd).length > 5 ? pv * 24 : pv; }
     else {
       const fv = getVal(row, ["from", "từ"]), tv2 = getVal(row, ["to", "đến"]);
-      if (fv && tv2) { const hF = parseTimeStrToHours(fv), hT = parseTimeStrToHours(tv2); dur = hT >= hF ? (hT - hF) * 24 : (hT + 1 - hF) * 24; }
+      if (fv && tv2) {
+        const hF = parseTimeStrToHours(fv), hT = parseTimeStrToHours(tv2);
+        // parseTimeStrToHours already returns hours-of-day. Multiplying the
+        // difference by 24 inflated 09:00-11:00 from 2h to 48h.
+        dur = hT >= hF ? hT - hF : hT + 24 - hF;
+      }
       else { const dr = getVal(row, ["duration", "tk_duration", "thời lượng"]); if (typeof dr === "number") dur = dr > 0 && dr <= 1 ? dr * 24 : dr; else if (typeof dr === "string") { const sv = dr.trim().replace(",", "."); if (sv.includes(":")) { const p = sv.split(":"); dur = (parseInt(p[0]) || 0) + (parseInt(p[1]) || 0) / 60; } else { const p2 = parseFloat(sv); if (!isNaN(p2)) dur = p2 > 0 && p2 <= 1 && sv.length > 4 ? p2 * 24 : p2; } } }
     }
     if (dur <= 0) return;

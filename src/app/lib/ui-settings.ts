@@ -769,21 +769,13 @@ export async function loadUiSettings(): Promise<UiSettings> {
     if (!result.customRules || !Array.isArray(result.customRules)) {
       result.customRules = [...defaultCustomRules];
     } else {
-      // Filter out any leaked un-scoped rules that distort Timesheet, Audit, Balance
-      result.customRules = result.customRules.filter((r) => {
-        if (!r || !isSafeCustomSelector(r.selector)) return false;
-        const sel = r.selector.trim();
-        if (
-          sel === ".table-container > div.min-h-0" ||
-          sel.includes("div#root:nth-of-type") ||
-          sel.includes("main > div.min-h-0") ||
-          r.id?.startsWith("rule-focus-") ||
-          r.id === "rule-table-container-div-min-h-0"
-        ) {
-          return false;
-        }
-        return true;
-      });
+      // A custom rule is user-owned state. Never silently discard a valid
+      // selector during hydration: doing so made a DIV jump back to its
+      // original style after the next DIV was edited or after a reload.
+      // Rules now return to the default state only through an explicit delete.
+      result.customRules = result.customRules.filter(
+        (rule) => rule && isSafeCustomSelector(rule.selector),
+      );
 
       defaultCustomRules.forEach((defRule) => {
         const idx = result.customRules!.findIndex(

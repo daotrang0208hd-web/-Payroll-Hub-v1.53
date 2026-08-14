@@ -260,7 +260,9 @@ export function useTimesheetCalculations(
         staffData: undefined,
         cacheData: undefined,
       };
-      const inputChunkSize = 2_000;
+      // Reduce the number of structured-clone turns for large source files.
+      // 10k rows keeps each message bounded but avoids hundreds of timer hops.
+      const inputChunkSize = 10_000;
       let fieldIndex = 0;
       let rowOffset = 0;
 

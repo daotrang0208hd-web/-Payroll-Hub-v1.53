@@ -141,6 +141,7 @@ export function UiSettingsModal({
   const [selectedDivInfo, setSelectedDivInfo] = useState<SelectedDivInfo | null>(null);
   const [selectedDivRect, setSelectedDivRect] = useState<SelectedDivRect | null>(null);
   const [isCompactInspector, setIsCompactInspector] = useState(false);
+  const [compactPanel, setCompactPanel] = useState<"type" | "spacing" | "paint" | null>(null);
 
   // Dynamic selector values helper for padding/margin
   const getCombinedPadding = useCallback(() => {
@@ -172,6 +173,30 @@ export function UiSettingsModal({
     };
     return `${toPx(t)} ${toPx(r)} ${toPx(b)} ${toPx(l)}`;
   }, [marTop, marRight, marBottom, marLeft]);
+
+  const editorHasChanges = useCallback(() => {
+    const baseline = editorBaselineRef.current;
+    const changed = (key: string, value: string) => (baseline[key] || "") !== value;
+    return (
+      changed("radius", newRadius) || changed("bg", newBg) ||
+      changed("color", newColor) || changed("border", newBorder) ||
+      changed("padTop", padTop) || changed("padRight", padRight) ||
+      changed("padBottom", padBottom) || changed("padLeft", padLeft) ||
+      changed("marTop", marTop) || changed("marRight", marRight) ||
+      changed("marBottom", marBottom) || changed("marLeft", marLeft) ||
+      changed("width", newWidth) || changed("height", newHeight) ||
+      changed("fontSize", newFontSize) || changed("fontFamily", newFontFamily) ||
+      changed("fontWeight", newFontWeight) || changed("fontStyle", newFontStyle) ||
+      changed("textDecoration", newTextDecoration) ||
+      changed("textAlign", newTextAlign) || changed("lineHeight", newLineHeight)
+    );
+  }, [
+    newRadius, newBg, newColor, newBorder,
+    padTop, padRight, padBottom, padLeft,
+    marTop, marRight, marBottom, marLeft,
+    newWidth, newHeight, newFontSize, newFontFamily, newFontWeight,
+    newFontStyle, newTextDecoration, newTextAlign, newLineHeight,
+  ]);
 
   const updatePaddingStates = useCallback((padVal: string) => {
     const parsed = parseShorthand(padVal);
@@ -554,6 +579,7 @@ export function UiSettingsModal({
       const selector = getReadableSelector(target);
       handleSelectorChange(selector, target);
       setIsInspecting(false);
+      setCompactPanel(null);
       setIsCompactInspector(true);
       toast.dismiss();
       toast.success(`Đã chọn phần tử: ${selector}`);
@@ -712,10 +738,57 @@ export function UiSettingsModal({
     return updatedSettings;
   };
 
-  const removeCustomRule = (id: string) => {
+  const persistSettings = useCallback(async (nextSettings: UiSettings) => {
+    await localforage.setItem(UI_SETTINGS_KEY, nextSettings);
+    persistedSettingsRef.current = nextSettings;
+    const { bgImage: _bgImage, ...smallSettings } = nextSettings;
+    localStorage.setItem(UI_SETTINGS_KEY + "_small", JSON.stringify(smallSettings));
+    applyUiSettings(nextSettings);
+    window.dispatchEvent(new Event("ui-settings-changed"));
+  }, []);
+
+  const applyAndPersistCurrentRule = async (keepSelection = true) => {
+    const updatedSettings = addCustomRule(keepSelection);
+    if (!updatedSettings) return false;
+    try {
+      await persistSettings(updatedSettings);
+      toast.success("Đã cố định style của DIV.");
+      return true;
+    } catch (error) {
+      console.error("Failed to persist selected DIV style", error);
+      toast.error("Không thể lưu style của DIV.");
+      return false;
+    }
+  };
+
+  const handleChooseAnotherElement = async () => {
+    if (editorHasChanges()) {
+      const saved = await applyAndPersistCurrentRule(true);
+      if (!saved) return;
+    }
+    setCompactPanel(null);
+    setIsCompactInspector(false);
+    setIsInspecting(true);
+  };
+
+  const removeCustomRule = async (id: string) => {
     const updatedRules = (settings.customRules || []).filter((r) => r.id !== id);
-    setSettings({ ...settings, customRules: updatedRules });
-    toast.success("Đã xoá style custom.");
+    const updatedSettings = { ...settings, customRules: updatedRules };
+    setSettings(updatedSettings);
+    try {
+      await persistSettings(updatedSettings);
+      if (newSelector && !(updatedRules || []).some((rule) => rule.selector === newSelector)) {
+        const element = selectedElementRef.current;
+        if (element && document.contains(element)) {
+          const info = captureSelectedElement(element, newSelector);
+          loadComputedFields(info);
+        }
+      }
+      toast.success("Đã xoá style custom và khôi phục DIV.");
+    } catch (error) {
+      console.error("Failed to delete selected DIV style", error);
+      toast.error("Không thể xoá style của DIV.");
+    }
   };
 
   useEffect(() => {
@@ -743,6 +816,7 @@ export function UiSettingsModal({
     wasOpenRef.current = false;
     setIsInspecting(false);
     setIsCompactInspector(false);
+    setCompactPanel(null);
     setNewSelector("");
     selectedElementRef.current?.classList.remove("ui-inspector-selected");
     selectedElementRef.current = null;
@@ -786,16 +860,9 @@ export function UiSettingsModal({
 
   const saveSettings = async () => {
     try {
-      await localforage.setItem(UI_SETTINGS_KEY, settings);
-      persistedSettingsRef.current = settings;
-      const { bgImage, ...smallSettings } = settings;
-      localStorage.setItem(
-        UI_SETTINGS_KEY + "_small",
-        JSON.stringify(smallSettings),
-      );
+      await persistSettings(settings);
       toast.dismiss();
       toast.success("Đã lưu cài đặt!");
-      window.dispatchEvent(new Event("ui-settings-changed"));
     } catch (e) {
       console.error("Failed to save UI settings", e);
       toast.dismiss();
@@ -811,11 +878,7 @@ export function UiSettingsModal({
     if (!updatedSettings) return;
 
     try {
-      await localforage.setItem(UI_SETTINGS_KEY, updatedSettings);
-      persistedSettingsRef.current = updatedSettings;
-      const { bgImage, ...smallSettings } = updatedSettings;
-      localStorage.setItem(UI_SETTINGS_KEY + "_small", JSON.stringify(smallSettings));
-      window.dispatchEvent(new Event("ui-settings-changed"));
+      await persistSettings(updatedSettings);
       toast.success("Đã lưu style của DIV!");
       onClose();
     } catch (error) {
@@ -935,164 +998,141 @@ export function UiSettingsModal({
             </div>
           </div>
 
+          {compactPanel && (
+            <div
+              data-ui-settings-shell="true"
+              className="fixed bottom-[76px] left-1/2 z-[100002] w-[min(420px,calc(100vw-24px))] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#1f1f21] p-4 text-white shadow-2xl"
+            >
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-300">
+                  {compactPanel === "type" ? "Kiểu chữ" : compactPanel === "spacing" ? "Kích thước & khoảng cách" : "Màu & đường viền"}
+                </span>
+                <button type="button" onClick={() => setCompactPanel(null)} className="rounded-lg p-1 text-slate-400 hover:bg-white/10 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {compactPanel === "type" && (
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-slate-500">Font family</span>
+                    <input value={newFontFamily} onChange={(event) => setNewFontFamily(event.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 text-sm outline-none focus:border-white/30" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["Font size", newFontSize, setNewFontSize], ["Line height", newLineHeight, setNewLineHeight]].map(([label, value, setter]) => (
+                      <label key={String(label)}>
+                        <span className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-slate-500">{String(label)}</span>
+                        <input value={value as string} onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-white/5 px-3 font-mono text-sm outline-none focus:border-white/30" />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { label: "Bold", icon: Bold, active: Number(newFontWeight) >= 600, onClick: () => setNewFontWeight(Number(newFontWeight) >= 600 ? "400" : "700") },
+                      { label: "Italic", icon: Italic, active: newFontStyle === "italic", onClick: () => setNewFontStyle(newFontStyle === "italic" ? "normal" : "italic") },
+                      { label: "Underline", icon: Underline, active: newTextDecoration.includes("underline"), onClick: () => toggleTextDecoration("underline") },
+                      { label: "Gạch ngang", icon: Strikethrough, active: newTextDecoration.includes("line-through"), onClick: () => toggleTextDecoration("line-through") },
+                    ].map(({ label, icon: Icon, active, onClick }) => (
+                      <button key={label} type="button" onClick={onClick} title={label} className={`flex h-10 w-10 items-center justify-center rounded-xl border ${active ? "border-white bg-white text-slate-950" : "border-white/10 text-slate-300 hover:bg-white/10"}`}>
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    ))}
+                    <span className="mx-1 h-10 w-px bg-white/10" />
+                    {[
+                      { value: "left", label: "Căn trái", icon: AlignLeft },
+                      { value: "center", label: "Căn giữa", icon: AlignCenter },
+                      { value: "right", label: "Căn phải", icon: AlignRight },
+                      { value: "justify", label: "Căn đều", icon: AlignJustify },
+                    ].map(({ value, label, icon: Icon }) => (
+                      <button key={value} type="button" onClick={() => setNewTextAlign(value)} title={label} className={`flex h-10 w-10 items-center justify-center rounded-xl border ${newTextAlign === value ? "border-white bg-white text-slate-950" : "border-white/10 text-slate-300 hover:bg-white/10"}`}>
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {compactPanel === "spacing" && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {[["Width", newWidth, setNewWidth], ["Height", newHeight, setNewHeight]].map(([label, value, setter]) => (
+                      <label key={String(label)}>
+                        <span className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-slate-500">{String(label)} (px)</span>
+                        <input value={value as string} onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)} className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 font-mono text-base outline-none focus:border-white/30" />
+                      </label>
+                    ))}
+                  </div>
+                  {[
+                    ["Padding (px)", [[padTop, setPadTop, "T"], [padRight, setPadRight, "R"], [padBottom, setPadBottom, "B"], [padLeft, setPadLeft, "L"]]],
+                    ["Margin (px)", [[marTop, setMarTop, "T"], [marRight, setMarRight, "R"], [marBottom, setMarBottom, "B"], [marLeft, setMarLeft, "L"]]],
+                  ].map(([groupLabel, fields]) => (
+                    <div key={String(groupLabel)}>
+                      <span className="mb-2 block text-sm font-medium text-slate-300">{String(groupLabel)}</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(fields as Array<[string, React.Dispatch<React.SetStateAction<string>>, string]>).map(([value, setter, label]) => (
+                          <label key={label} className="flex h-12 items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3">
+                            <span className="w-4 text-[10px] font-black text-slate-500">{label}</span>
+                            <input value={value} onChange={(event) => setter(event.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-base outline-none" />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {compactPanel === "paint" && (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {[
+                    ["Nền", newBg, setNewBg], ["Màu chữ", newColor, setNewColor],
+                    ["Viền", newBorder, setNewBorder], ["Bo góc", newRadius, setNewRadius],
+                  ].map(([label, value, setter]) => (
+                    <label key={String(label)}>
+                      <span className="mb-1 block text-[9px] font-bold uppercase tracking-wider text-slate-500">{String(label)}</span>
+                      <input value={value as string} onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)} className="h-11 w-full rounded-xl border border-white/10 bg-white/5 px-3 font-mono text-xs outline-none focus:border-white/30" />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <div
             data-ui-settings-shell="true"
-            className="fixed bottom-4 left-1/2 z-[100001] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-stretch overflow-x-auto rounded-2xl border border-white/15 bg-[#1f1f21] text-white shadow-2xl"
+            className="fixed bottom-4 left-1/2 z-[100001] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-stretch overflow-hidden rounded-2xl border border-white/15 bg-[#1f1f21] text-white shadow-2xl"
           >
-            <button
-              type="button"
-              onClick={() => {
-                setIsCompactInspector(false);
-                setIsInspecting(true);
-              }}
-              className="flex min-w-14 items-center justify-center border-r border-white/10 px-3 hover:bg-white/10"
-              title="Chọn DIV khác"
-            >
+            <button type="button" onClick={() => void handleChooseAnotherElement()} title="Chọn DIV khác" className="flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white">
               <Target className="h-4 w-4" />
             </button>
-            <label className="flex min-w-44 flex-col justify-center border-r border-white/10 px-3 py-2">
-              <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Font family</span>
-              <input
-                value={newFontFamily}
-                onChange={(event) => setNewFontFamily(event.target.value)}
-                aria-label="Font family của DIV"
-                className="w-40 border-0 bg-transparent p-0 text-[11px] text-white outline-none"
-              />
-            </label>
-
-            <div className="flex items-center border-r border-white/10 px-1">
-              {[
-                { label: "Bold", icon: Bold, active: Number(newFontWeight) >= 600, onClick: () => setNewFontWeight(Number(newFontWeight) >= 600 ? "400" : "700") },
-                { label: "Italic", icon: Italic, active: newFontStyle === "italic", onClick: () => setNewFontStyle(newFontStyle === "italic" ? "normal" : "italic") },
-                { label: "Underline", icon: Underline, active: newTextDecoration.includes("underline"), onClick: () => toggleTextDecoration("underline") },
-                { label: "Gạch ngang", icon: Strikethrough, active: newTextDecoration.includes("line-through"), onClick: () => toggleTextDecoration("line-through") },
-              ].map(({ label, icon: Icon, active, onClick }) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={onClick}
-                  title={label}
-                  className={`m-1 flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center border-r border-white/10 px-1">
-              {[
-                { value: "left", label: "Căn trái", icon: AlignLeft },
-                { value: "center", label: "Căn giữa", icon: AlignCenter },
-                { value: "right", label: "Căn phải", icon: AlignRight },
-                { value: "justify", label: "Căn đều", icon: AlignJustify },
-              ].map(({ value, label, icon: Icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setNewTextAlign(value)}
-                  title={label}
-                  className={`m-1 flex h-9 w-9 items-center justify-center rounded-lg ${newTextAlign === value ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
-                >
-                  <Icon className="h-4 w-4" />
-                </button>
-              ))}
-            </div>
-
-            {[
-              { label: "Font", value: newFontSize, setter: setNewFontSize, width: "w-16" },
-              { label: "Line", value: newLineHeight, setter: setNewLineHeight, width: "w-16" },
-              { label: "Width", value: newWidth, setter: setNewWidth, width: "w-20" },
-              { label: "Height", value: newHeight, setter: setNewHeight, width: "w-20" },
-            ].map(({ label, value, setter, width }) => (
-              <label key={label} className="flex min-w-24 flex-col justify-center border-r border-white/10 px-2 py-2">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-                <input
-                  value={value}
-                  onChange={(event) => setter(event.target.value)}
-                  aria-label={`${label} của DIV`}
-                  className={`${width} border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none`}
-                />
-              </label>
-            ))}
-
-            <div className="flex min-w-[248px] flex-col justify-center border-r border-white/10 px-2 py-1.5">
-              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-slate-500"><Ruler className="h-3 w-3" /> Padding T/R/B/L</span>
-              <div className="mt-1 grid grid-cols-4 gap-1">
-                {[
-                  [padTop, setPadTop, "T"], [padRight, setPadRight, "R"], [padBottom, setPadBottom, "B"], [padLeft, setPadLeft, "L"],
-                ].map(([value, setter, label]) => (
-                  <label key={String(label)} className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1">
-                    <span className="text-[8px] text-slate-500">{String(label)}</span>
-                    <input
-                      value={value as string}
-                      onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)}
-                      className="w-9 bg-transparent py-1 text-right font-mono text-[10px] text-white outline-none"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex min-w-[248px] flex-col justify-center border-r border-white/10 px-2 py-1.5">
-              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-slate-500"><Maximize2 className="h-3 w-3" /> Margin T/R/B/L</span>
-              <div className="mt-1 grid grid-cols-4 gap-1">
-                {[
-                  [marTop, setMarTop, "T"], [marRight, setMarRight, "R"], [marBottom, setMarBottom, "B"], [marLeft, setMarLeft, "L"],
-                ].map(([value, setter, label]) => (
-                  <label key={String(label)} className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1">
-                    <span className="text-[8px] text-slate-500">{String(label)}</span>
-                    <input
-                      value={value as string}
-                      onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)}
-                      className="w-9 bg-transparent py-1 text-right font-mono text-[10px] text-white outline-none"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {[
-              { label: "Nền", icon: PaintBucket, value: newBg, setter: setNewBg },
-              { label: "Chữ", icon: Type, value: newColor, setter: setNewColor },
-              { label: "Viền", icon: SquareDashed, value: newBorder, setter: setNewBorder },
-              { label: "Bo góc", icon: Maximize2, value: newRadius, setter: setNewRadius },
-            ].map(({ label, icon: Icon, value, setter }) => (
-              <label key={label} className="flex min-w-32 items-center gap-2 border-r border-white/10 px-3 py-2">
-                <Icon className="h-4 w-4 shrink-0 text-slate-300" />
-                <span className="flex min-w-0 flex-col">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-                  <input
-                    value={value}
-                    onChange={(event) => setter(event.target.value)}
-                    aria-label={`Chỉnh ${label.toLowerCase()} của DIV`}
-                    className="w-24 border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none"
-                  />
-                </span>
-              </label>
-            ))}
-            <button
-              type="button"
-              onClick={() => setIsCompactInspector(false)}
-              className="flex min-w-16 flex-col items-center justify-center border-r border-white/10 px-3 text-[8px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white"
-              title="Mở bảng cài đặt đầy đủ"
-            >
-              <PanelTopOpen className="mb-1 h-4 w-4" />
-              Mở rộng
+            <button type="button" onClick={() => setCompactPanel((value) => value === "paint" ? null : "paint")} title="Màu & viền" className={`flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 transition-colors ${compactPanel === "paint" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <PaintBucket className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => addCustomRule(true)}
-              className="flex min-w-16 flex-col items-center justify-center border-r border-white/10 px-3 text-[8px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white"
-              title="Áp dụng style vào danh sách"
-            >
-              <Check className="mb-1 h-4 w-4" />
-              Áp dụng
+            <button type="button" onClick={() => setCompactPanel((value) => value === "type" ? null : "type")} title="Kiểu chữ" className={`flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 transition-colors ${compactPanel === "type" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <Type className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={saveCompactSettings}
-              className="min-w-20 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-slate-200"
-            >
+            <button type="button" onClick={() => setCompactPanel((value) => value === "spacing" ? null : "spacing")} title="Kích thước & khoảng cách" className={`flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 transition-colors ${compactPanel === "spacing" ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <Ruler className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => { setCompactPanel(null); setIsCompactInspector(false); }} title="Mở bảng cài đặt đầy đủ" className="flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white">
+              <PanelTopOpen className="h-4 w-4" />
+            </button>
+            {settings.customRules?.some((rule) => rule.selector === newSelector) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rule = settings.customRules?.find((item) => item.selector === newSelector);
+                  if (rule) void removeCustomRule(rule.id);
+                }}
+                title="Xoá style của DIV"
+                className="flex h-12 w-11 shrink-0 items-center justify-center border-r border-white/10 text-rose-300 hover:bg-rose-500/20 hover:text-rose-100"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            <button type="button" onClick={() => void applyAndPersistCurrentRule(true)} className="flex h-12 min-w-16 items-center justify-center gap-1 border-r border-white/10 px-2 text-[8px] font-black uppercase tracking-wider text-slate-200 hover:bg-white/10 hover:text-white">
+              <Check className="h-4 w-4" /> Áp dụng
+            </button>
+            <button type="button" onClick={saveCompactSettings} className="h-12 min-w-16 bg-white px-3 text-[9px] font-black uppercase tracking-widest text-slate-950 hover:bg-slate-200">
               Lưu
             </button>
           </div>
@@ -1513,10 +1553,10 @@ export function UiSettingsModal({
 
                       <button
                         type="button"
-                        onClick={() => addCustomRule()}
+                        onClick={() => void applyAndPersistCurrentRule(false)}
                         className="mt-2 w-full bg-primary text-white hover:bg-primary/90 font-bold py-1.5 rounded transition-all text-[0.65rem] uppercase tracking-wider cursor-pointer"
                       >
-                        ÁP DỤNG STYLE MỚI
+                        ÁP DỤNG & CỐ ĐỊNH STYLE
                       </button>
                     </div>
 
@@ -1550,7 +1590,7 @@ export function UiSettingsModal({
                             </div>
                             <button
                               type="button"
-                              onClick={() => removeCustomRule(rule.id)}
+                              onClick={() => void removeCustomRule(rule.id)}
                               className="text-red-500 hover:text-red-700 font-bold px-1 rounded hover:bg-red-50 cursor-pointer text-[0.55rem] uppercase tracking-wider shrink-0"
                             >
                               Xoá
