@@ -2,61 +2,69 @@
 
 ## Scope
 
-- Compact selected-DIV toolbar and popup editors.
-- Padding and margin controls changed from two wide inline toolbar groups to a
-  single compact spacing popup.
-- Independent persistence for multiple custom DIV rules.
+- Remove the selected-DIV success toast and the floating DIV metadata panel.
+- Redesign the Audit source cards as a compact, theme-aware source rail.
+- Prevent the full-screen data loader from trapping the application after F5.
 
 ## Source visual truth
 
-- `/workspace/scratch/b2cc3a4694a9/upload/1aceedd4-d349-4714-b2ee-ff7f898b4ea4.png`
-  - 253 × 104 px.
-  - Current wide inline Padding/Margin toolbar groups that overflow the viewport.
-- `/workspace/scratch/b2cc3a4694a9/upload/efe3e97e-6ea8-4b31-a214-5c61dd6228d5.png`
-  - 432 × 599 px.
-  - Target compact dark popup with two-column Padding and Margin fields.
+- `/workspace/scratch/b2cc3a4694a9/upload/c8617c5a-8282-4c4e-af4f-58919fffc8c1.png`
+  - 728 × 228 px.
+  - Toast that must no longer be displayed.
+- `/workspace/scratch/b2cc3a4694a9/upload/8cacf090-410a-4a2b-a45e-3b25515835f9.png`
+  - 604 × 260 px.
+  - Floating DIV metadata panel that must no longer be displayed.
+- `/workspace/scratch/b2cc3a4694a9/upload/1ce3cab8-43ef-423b-9dbd-1f36bfdc9f72.png`
+  - 527 × 713 px.
+  - Current Audit source rail and its file/status/date content hierarchy.
+- `/workspace/scratch/b2cc3a4694a9/upload/2e04fde5-8a76-4784-88d1-95f4a847a767.png`
+  - 840 × 398 px.
+  - Blocking F5 loader state.
 
-Both source images were opened at original resolution before this report.
+All source images were opened at original resolution. The Audit screenshot is a
+problem-state reference, while the user's requested target is a denser redesign
+that retains the same content and business states.
 
 ## Implementation evidence
 
-- Intended route/state: any Payroll Hub route, UI settings open, DIV inspector
-  active, spacing popup open.
+- Intended route/state: `/audit` with MR.03, MR.07 and roster data present.
 - Intended desktop viewport: 1280 × 800 CSS px, device scale factor 1.
-- Browser-rendered screenshot: unavailable.
-- The production build passed and the compact controls are bounded by
-  `min(420px, 100vw - 24px)`, but build output is not visual evidence.
+- Browser-rendered implementation screenshot: unavailable.
+- Local preview startup on port 4173 was denied by the workspace network policy
+  before the server process could start.
 
 ## Browser verification
 
-- Cloud browser connection succeeded.
-- `http://terminal.local:4173/` returned `ERR_CONNECTION_REFUSED` because the
-  local preview server could not be started in this workspace: opening the
-  preview port was denied before execution.
-- Primary interactions, navigation, persistence reload, screenshots and console
-  errors therefore could not be verified honestly in a rendered browser.
+- Local preview command attempted with the required host and port.
+- Preview startup was blocked before execution, so the cloud browser could not
+  open the current implementation.
+- F5, file-card interactions, compact DIV controls and browser console errors
+  could not be verified in a rendered browser.
 
 ## Findings
 
 - [P1] Rendered comparison is blocked.
-  - Location: compact DIV inspector.
-  - Evidence: source images are available, but no implementation capture exists.
-  - Impact: exact spacing, toolbar fit and popup placement cannot be visually
-    signed off at the target viewport.
-  - Fix: start the local preview on port 4173, open the spacing popup, capture at
-    1280 × 800 and compare it with the second source image.
+  - Location: Audit source rail, compact DIV inspector and initial F5 state.
+  - Evidence: all source screenshots are available, but no browser-rendered
+    implementation capture can be produced in this workspace.
+  - Impact: responsive fit, final text truncation, theme contrast and the exact
+    loader-release timing cannot be visually signed off.
+  - Fix: run the current branch in an environment that permits port 4173,
+    capture `/audit` at 1280 × 800 with source data loaded, then repeat after F5.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: code uses the existing application font stack and
-  9–16 px inspector labels/values; rendered fidelity not verified.
-- Spacing and layout rhythm: popup is capped at 420 px with a two-column field
-  grid and 12 px viewport gutters; rendered fidelity not verified.
-- Colors and visual tokens: dark neutral popup and white/gray controls match the
-  source direction in code; rendered fidelity not verified.
-- Image quality and asset fidelity: no raster assets or substitute icons were
-  added; existing Lucide UI icons are used.
-- Copy and content: Padding, Margin, Width and Height labels are present.
+- Fonts and typography: existing application font stack retained; card labels
+  use a compact 0.46–0.75 rem hierarchy with single-line truncation. Rendered
+  fidelity not verified.
+- Spacing and layout rhythm: source rail uses 8 px card gaps, 32 px headers,
+  58 px content rows and a 300 px desktop width. Rendered fidelity not verified.
+- Colors and visual tokens: all card surfaces derive from `--primary`, `--card`,
+  `--border` and semantic emerald status colors. Rendered contrast not verified.
+- Image quality and asset fidelity: no raster assets were required; existing
+  Lucide icons are retained for source type and completion status.
+- Copy and content: MR.03, MR.07, roster state, file name, date range and common
+  date range remain present; success toast and DIV metadata copy are removed.
 
 ## Automated checks
 
@@ -66,7 +74,7 @@ Both source images were opened at original resolution before this report.
 
 ## Comparison history
 
-- Pass 1: source images opened; implementation capture blocked by unavailable
-  local preview server. No visual comparison iteration was possible.
+- Pass 1: source images opened at original resolution; implementation capture
+  blocked because the local preview server could not be started.
 
 final result: blocked

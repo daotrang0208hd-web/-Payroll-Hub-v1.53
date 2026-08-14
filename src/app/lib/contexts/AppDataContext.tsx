@@ -88,21 +88,30 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadData = async () => {
       try {
-        let saved = await localforage.getItem<AppData>(STORAGE_KEY);
-        if (!saved) {
-          const legacySaved = localStorage.getItem(STORAGE_KEY);
-          if (legacySaved) {
-            try {
-              saved = JSON.parse(legacySaved);
-              await localforage.setItem(STORAGE_KEY, saved);
-            } catch (e) {
-              console.error("Failed to parse legacy data", e);
+        const hydratedSplitFields = new Set<keyof AppData>();
+        const savedMetadata =
+          await localforage.getItem<Partial<AppData>>(STORAGE_META_KEY);
+        let saved: AppData | null = null;
+
+        // The old monolithic snapshot can contain hundreds of thousands of
+        // rows. Reading it before the split metadata duplicates all large
+        // collections during F5 and can block the page on the loading screen.
+        // Prefer the lightweight metadata snapshot and touch the legacy value
+        // only for a one-time migration.
+        if (!savedMetadata) {
+          saved = await localforage.getItem<AppData>(STORAGE_KEY);
+          if (!saved) {
+            const legacySaved = localStorage.getItem(STORAGE_KEY);
+            if (legacySaved) {
+              try {
+                saved = JSON.parse(legacySaved);
+              } catch (e) {
+                console.error("Failed to parse legacy data", e);
+              }
             }
           }
         }
 
-        const savedMetadata =
-          await localforage.getItem<Partial<AppData>>(STORAGE_META_KEY);
         if (saved || savedMetadata) {
           saved = {
             ...INITIAL_APP_DATA,
@@ -117,10 +126,36 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
               ),
             ),
           );
+
+          // Early split-storage releases could write metadata while still
+          // keeping the large arrays only in the legacy snapshot. Recover
+          // those missing fields once, then the next save migrates them into
+          // their dedicated keys and deletes the obsolete full snapshot.
+          let legacySplitFallback: AppData | null = null;
+          if (
+            savedMetadata &&
+            splitValues.some((value) => value === null || value === undefined)
+          ) {
+            legacySplitFallback = await localforage.getItem<AppData>(STORAGE_KEY);
+            if (!legacySplitFallback) {
+              const localFallback = localStorage.getItem(STORAGE_KEY);
+              if (localFallback) {
+                try {
+                  legacySplitFallback = JSON.parse(localFallback);
+                } catch (e) {
+                  console.error("Failed to parse split-storage fallback", e);
+                }
+              }
+            }
+          }
+
           SPLIT_STORAGE_FIELDS.forEach((field, index) => {
             const splitValue = splitValues[index];
             if (splitValue !== null && splitValue !== undefined) {
               (saved as any)[field] = splitValue;
+              hydratedSplitFields.add(field);
+            } else if (legacySplitFallback?.[field] !== undefined) {
+              (saved as any)[field] = legacySplitFallback[field];
             }
           });
         }
@@ -202,7 +237,11 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           }
 
           SPLIT_STORAGE_FIELDS.forEach((field) => {
-            persistedSplitRefs.current.set(field, saved?.[field]);
+            if (hydratedSplitFields.has(field)) {
+              persistedSplitRefs.current.set(field, saved?.[field]);
+            } else {
+              persistedSplitRefs.current.delete(field);
+            }
           });
 
           // --- MIGRATION FOR HOLD_AE ---
@@ -246,15 +285,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
               "Bank_North_AE",
               "SoSanh_AE",
             ];
+            const dataForMigration = saved;
             keysToMigrate.forEach((k) => {
-              if (saved[k]) {
-                const headers = saved[k].headers || [];
+              if (dataForMigration[k]) {
+                const headers = dataForMigration[k].headers || [];
                 if (headers.includes("STT") || headers.includes("No")) {
-                  saved[k].headers = headers.map((x: string) =>
+                  dataForMigration[k].headers = headers.map((x: string) =>
                     x === "STT" || x === "No" ? "No." : x
                   );
-                  if (saved[k].data && Array.isArray(saved[k].data)) {
-                    saved[k].data = saved[k].data.map((row: any) => {
+                  if (dataForMigration[k].data && Array.isArray(dataForMigration[k].data)) {
+                    dataForMigration[k].data = dataForMigration[k].data.map((row: any) => {
                       const newRow = { ...row };
                       if ("STT" in newRow) {
                         newRow["No."] = newRow["STT"];
@@ -338,7 +378,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           setState((prev) => ({
             ...prev,
             present: {
-              ...saved,
+              ...(saved as AppData),
             },
           }));
         } else {
@@ -387,6 +427,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           delete (dataToSave as any)[field];
         }
         await localforage.setItem(STORAGE_META_KEY, dataToSave);
+
+        // The split snapshot is now complete, so retaining the legacy full
+        // object only makes every future reload clone the same large data a
+        // second time. Remove it after the new snapshot is safely persisted.
+        await localforage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(STORAGE_KEY);
       } catch (e) {
         console.error("Failed to save app data to storage", e);
         try {

@@ -110,6 +110,98 @@ function DebouncedSearchInput({
   );
 }
 
+interface AuditSourceCardProps {
+  sourceCode: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  isReady: boolean;
+  primaryText: string;
+  secondaryText: string;
+  readyLabel: string;
+  emptyTitle: string;
+  emptyHint: string;
+  inputId?: string;
+  onFileChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+function AuditSourceCard({
+  sourceCode,
+  title,
+  icon: Icon,
+  isReady,
+  primaryText,
+  secondaryText,
+  readyLabel,
+  emptyTitle,
+  emptyHint,
+  inputId,
+  onFileChange,
+}: AuditSourceCardProps) {
+  const content = isReady ? (
+    <div className="audit-source-card__content">
+      <span className="audit-source-card__ready-icon" aria-hidden="true">
+        <CheckCircle2 className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className="block truncate text-[0.64rem] font-extrabold uppercase tracking-[0.04em] text-slate-700"
+          title={primaryText}
+        >
+          {primaryText}
+        </span>
+        <span
+          className="mt-0.5 block truncate text-[0.68rem] font-black leading-tight text-primary"
+          title={secondaryText}
+        >
+          {secondaryText}
+        </span>
+      </span>
+      {inputId && <RefreshCw className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />}
+    </div>
+  ) : (
+    <div className="audit-source-card__content">
+      <span className="audit-source-card__empty-icon" aria-hidden="true">
+        {inputId ? <PlusCircle className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[0.64rem] font-extrabold uppercase tracking-[0.08em] text-slate-600">
+          {emptyTitle}
+        </span>
+        <span className="mt-0.5 block truncate text-[0.55rem] font-semibold text-slate-400" title={emptyHint}>
+          {emptyHint}
+        </span>
+      </span>
+    </div>
+  );
+
+  return (
+    <section className={`audit-source-card ${isReady ? "is-ready" : "is-empty"}`}>
+      <div className="audit-source-card__header">
+        <span className="audit-source-card__code">{sourceCode}</span>
+        <Icon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate" title={title}>{title}</span>
+        <span className={`audit-source-card__state ${isReady ? "is-ready" : ""}`}>
+          {isReady ? readyLabel : "Chờ dữ liệu"}
+        </span>
+      </div>
+      {inputId ? (
+        <label htmlFor={inputId} className="audit-source-card__body cursor-pointer" title="Bấm để chọn lại file">
+          <input
+            type="file"
+            id={inputId}
+            className="hidden"
+            accept=".xlsx,.xls,.csv,.gsheet"
+            onChange={onFileChange}
+          />
+          {content}
+        </label>
+      ) : (
+        <div className="audit-source-card__body">{content}</div>
+      )}
+    </section>
+  );
+}
+
 export function Audit() {
   const { appData, updateAppData } = useAppData();
   const navigate = useNavigate();
@@ -1270,12 +1362,11 @@ export function Audit() {
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: -320, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="w-full md:w-[284px] bg-white border border-emerald-100 p-3 flex flex-col gap-4 relative md:flex-none shrink-0 z-[60] min-h-0 rounded-none soft-card shadow-lg"
-            style={{ borderColor: "#d0d0d0", borderRadius: "0px" }}
+            className="audit-source-panel w-full md:w-[300px] border p-2.5 flex flex-col gap-2.5 relative md:flex-none shrink-0 z-[60] min-h-0 soft-card"
           >
-            <div className="absolute inset-0 bg-pattern-green opacity-[0.03] pointer-events-none rounded-none" style={{ borderRadius: "0px" }} />
+            <div className="absolute inset-0 bg-pattern-green opacity-[0.025] pointer-events-none" />
 
-            <div className="flex flex-col gap-5 flex-1 relative z-10 overflow-y-auto custom-scrollbar pr-1 w-full">
+            <div className="audit-source-list flex flex-col gap-2 flex-1 relative z-10 overflow-y-auto custom-scrollbar pr-1 w-full">
               {activeTab === "detail" && selectedDetailRow && (
                 <div className="p-4 bg-emerald-50/50 rounded-none border border-emerald-200/60 shadow-sm animate-in fade-in zoom-in-95" style={{ borderRadius: "0px" }}>
                   <div className="flex items-center justify-between mb-2">
@@ -1316,183 +1407,64 @@ export function Audit() {
                 </div>
               )}
 
-              {/* Source A Component */}
-              <div className="audit-source-card flex w-full shrink-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-2xs">
-                <span className="flex min-h-7 items-center gap-2 border-b border-slate-200 bg-primary/[0.035] px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-widest text-slate-600">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <FileText className="h-3 w-3" />
-                  </span>
-                  <span className="whitespace-normal break-words">MR.03 - Teacher Timesheet</span>
-                </span>
-                <label
-                  htmlFor="upload-file-a-audit"
-                  className={`relative flex min-h-[68px] w-full cursor-pointer flex-col justify-center p-2.5 transition-all duration-300 group ${
-                    fileNameA
-                      ? "bg-emerald-50/45 hover:bg-emerald-50/70"
-                      : "bg-white hover:bg-primary/[0.025]"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    id="upload-file-a-audit"
-                    className="hidden"
-                    accept=".xlsx,.xls,.csv,.gsheet"
-                    onChange={onFileAChange}
-                  />
-                  {!fileNameA ? (
-                    <div className="flex w-full flex-col items-center gap-1 py-1 text-center">
-                      <PlusCircle className="h-6 w-6 text-slate-400 transition-transform duration-300 group-hover:scale-105 group-hover:text-primary" />
-                      <span className="text-[0.65rem] font-extrabold text-slate-500 uppercase tracking-widest block mt-1">
-                        Tải File GV
-                      </span>
-                      <span className="text-[0.55rem] text-slate-400 font-bold">
-                        Hỗ trợ .xlsx, .xls, .csv
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="w-full flex items-center gap-3">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center shrink-0 text-emerald-600 shadow-sm">
-                        <CheckCircle2 className="w-5 h-5 animate-bounce-subtle" />
-                      </div>
-                      <div className="flex-1 min-w-0 py-1">
-                        <p className="text-[0.65rem] font-bold text-slate-700 whitespace-normal break-words leading-snug uppercase tracking-wide">
-                          {fileNameA}
-                        </p>
-                        <p className="text-[11px] leading-tight font-extrabold text-primary uppercase mt-0.5 whitespace-normal break-words" title={teacherDateRange || "Dữ liệu đã sẵn sàng"}>
-                          {teacherDateRange || "Dữ liệu đã sẵn sàng"}
-                        </p>
-                        <span className="inline-block text-[8px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded mt-1 tracking-wider uppercase">
-                          HOÀN TẤT
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </label>
-              </div>
+              <AuditSourceCard
+                sourceCode="A"
+                title="MR.03 · Teacher Timesheet"
+                icon={FileText}
+                isReady={Boolean(fileNameA)}
+                primaryText={fileNameA || ""}
+                secondaryText={teacherDateRange || "Dữ liệu đã sẵn sàng"}
+                readyLabel="Hoàn tất"
+                emptyTitle="Tải file giáo viên"
+                emptyHint="Hỗ trợ .xlsx, .xls, .csv"
+                inputId="upload-file-a-audit"
+                onFileChange={onFileAChange}
+              />
 
-              {/* Source Config Component */}
-              <div className="audit-source-card flex w-full shrink-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-2xs">
-                <span className="flex min-h-7 items-center gap-2 border-b border-slate-200 bg-primary/[0.035] px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-widest text-slate-600">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <BadgeCheck className="h-3 w-3" />
-                  </span>
-                  <span className="whitespace-normal break-words">MR.07 - Class hour</span>
-                </span>
-                <label
-                  htmlFor="upload-file-config-audit"
-                  className={`relative flex min-h-[68px] w-full cursor-pointer flex-col justify-center p-2.5 transition-all duration-300 group ${
-                    fileNameConfig
-                      ? "bg-emerald-50/45 hover:bg-emerald-50/70"
-                      : "bg-white hover:bg-primary/[0.025]"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    id="upload-file-config-audit"
-                    className="hidden"
-                    accept=".xlsx,.xls,.csv,.gsheet"
-                    onChange={onFileConfigChange}
-                  />
-                  {!fileNameConfig ? (
-                    <div className="flex flex-col items-center gap-1 py-1 text-center">
-                      <PlusCircle className="h-6 w-6 text-slate-400 transition-transform duration-300 group-hover:scale-105 group-hover:text-primary" />
-                      <span className="text-[0.65rem] font-extrabold text-slate-500 uppercase tracking-widest block mt-1">
-                        Tải File Sĩ Số
-                      </span>
-                      <span className="text-[0.55rem] text-slate-400 font-bold">
-                        Hỗ trợ .xlsx, .xls, .csv
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="w-full flex items-center gap-3">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center shrink-0 text-emerald-600 shadow-sm">
-                        <CheckCircle2 className="w-5 h-5 animate-bounce-subtle" />
-                      </div>
-                      <div className="flex-1 min-w-0 py-1">
-                        <p className="text-[0.65rem] font-bold text-slate-700 whitespace-normal break-words leading-snug uppercase tracking-wide">
-                          {fileNameConfig}
-                        </p>
-                        <p className="text-[11px] leading-tight font-extrabold text-primary uppercase mt-0.5 whitespace-normal break-words" title={configDateRange || "Dữ liệu sĩ số đã tải lên"}>
-                          {configDateRange || "DỮ LIỆU SĨ SỐ OK"}
-                        </p>
-                        <span className="inline-block text-[8px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded mt-1 tracking-wider uppercase">
-                          HOÀN TẤT
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </label>
-              </div>
+              <AuditSourceCard
+                sourceCode="C"
+                title="MR.07 · Class hour"
+                icon={BadgeCheck}
+                isReady={Boolean(fileNameConfig)}
+                primaryText={fileNameConfig || ""}
+                secondaryText={configDateRange || "Dữ liệu sĩ số đã tải lên"}
+                readyLabel="Hoàn tất"
+                emptyTitle="Tải file sĩ số"
+                emptyHint="Hỗ trợ .xlsx, .xls, .csv"
+                inputId="upload-file-config-audit"
+                onFileChange={onFileConfigChange}
+              />
 
-              {/* Source B Component */}
-              <div className="audit-source-card flex w-full shrink-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-2xs">
-                <span className="flex min-h-7 items-center gap-2 border-b border-slate-200 bg-primary/[0.035] px-2.5 py-1 text-[0.62rem] font-extrabold uppercase tracking-widest text-slate-600">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Users className="h-3 w-3" />
-                  </span>
-                  <span className="whitespace-normal break-words">Dữ liệu Lớp Học (B)</span>
-                </span>
-                <div
-                  className={`relative flex min-h-[68px] w-full flex-col justify-center p-2.5 transition-all duration-300 group ${
-                    rosterData?.length > 0
-                      ? "bg-emerald-50/45"
-                      : "bg-white"
-                  }`}
-                >
-                  {!rosterData?.length ? (
-                    <div className="flex w-full flex-col items-center gap-1 py-1 text-center">
-                      <Users className="h-6 w-6 text-slate-400 animate-pulse-subtle" />
-                      <span className="text-[0.65rem] font-extrabold text-slate-500 uppercase tracking-widest block mt-1">
-                        Chưa có Roster
-                      </span>
-                      <span className="text-[0.55rem] text-slate-400 font-bold">
-                        Cần tải dữ liệu ở Timesheet Hub
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="w-full flex items-center gap-3">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center shrink-0 text-emerald-600 shadow-sm">
-                        <CheckCircle2 className="w-5 h-5 animate-bounce-subtle" />
-                      </div>
-                      <div className="flex-1 min-w-0 py-1">
-                        <p className="text-[0.65rem] font-bold text-slate-700 whitespace-normal break-words leading-snug uppercase tracking-wide">
-                          {rosterData.length} dòng dữ liệu
-                        </p>
-                        <p className="text-[11px] leading-tight font-extrabold text-primary uppercase mt-0.5 whitespace-normal break-words" title={taDateRange || "Đang chờ dữ liệu"}>
-                          {taDateRange || "Đang chờ dữ liệu"}
-                        </p>
-                        <span className="inline-block text-[8px] font-black text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded mt-1 tracking-wider uppercase border border-emerald-200">
-                          ROSTER GỐC OK
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <AuditSourceCard
+                sourceCode="B"
+                title="Dữ liệu lớp học"
+                icon={Users}
+                isReady={rosterData.length > 0}
+                primaryText={`${rosterData.length.toLocaleString("vi-VN")} dòng dữ liệu`}
+                secondaryText={taDateRange || "Đang chờ dữ liệu"}
+                readyLabel="Roster OK"
+                emptyTitle="Chưa có Roster"
+                emptyHint="Tải dữ liệu tại Timesheet Hub"
+              />
             </div>
 
             {/* Common Date Range Display */}
             {(teacherDateRange || taDateRange || configDateRange) && (
-              <div className="audit-source-card mt-auto flex w-full shrink-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-2xs">
-                <div className="flex min-h-7 items-center gap-2 border-b border-slate-200 bg-primary/[0.035] px-2.5 py-1">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <Calendar className="h-3 w-3" />
-                  </span>
-                  <h4 className="text-[0.6rem] font-extrabold uppercase tracking-wider text-slate-600">
-                    Thời gian chung (A, B & MR.07)
-                  </h4>
+              <section className="audit-source-card audit-source-card--range relative z-10">
+                <div className="audit-source-card__header">
+                  <span className="audit-source-card__code"><Calendar className="h-3 w-3" /></span>
+                  <span className="min-w-0 flex-1 truncate">Thời gian chung</span>
+                  <span className="audit-source-card__state">A · B · MR.07</span>
                 </div>
-                <div className="flex min-h-[44px] items-center px-2.5 py-2">
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="whitespace-normal break-words text-[11px] font-black uppercase leading-snug text-primary"
-                      title={commonDateRange || (isProcessing ? "Đang tính toán..." : "Chưa đủ dữ liệu")}
-                    >
-                      {commonDateRange || (isProcessing ? "Đang tính toán..." : "Chưa đủ dữ liệu")}
-                    </p>
-                  </div>
+                <div className="audit-source-card__body">
+                  <p
+                    className="w-full truncate text-[0.75rem] font-black text-primary"
+                    title={commonDateRange || (isProcessing ? "Đang tính toán..." : "Chưa đủ dữ liệu")}
+                  >
+                    {commonDateRange || (isProcessing ? "Đang tính toán..." : "Chưa đủ dữ liệu")}
+                  </p>
                 </div>
-              </div>
+              </section>
             )}
           </motion.div>
         )}

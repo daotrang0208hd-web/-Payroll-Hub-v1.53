@@ -89,12 +89,6 @@ interface SelectedDivInfo {
   height: string;
 }
 
-interface SelectedDivRect {
-  top: number;
-  left: number;
-  width: number;
-}
-
 export function UiSettingsModal({
   isOpen,
   onClose,
@@ -139,7 +133,6 @@ export function UiSettingsModal({
   const selectedElementRef = useRef<HTMLElement | null>(null);
   const editorBaselineRef = useRef<Record<string, string>>({});
   const [selectedDivInfo, setSelectedDivInfo] = useState<SelectedDivInfo | null>(null);
-  const [selectedDivRect, setSelectedDivRect] = useState<SelectedDivRect | null>(null);
   const [isCompactInspector, setIsCompactInspector] = useState(false);
   const [compactPanel, setCompactPanel] = useState<"type" | "spacing" | "paint" | null>(null);
 
@@ -259,11 +252,6 @@ export function UiSettingsModal({
       height: `${Math.round(rect.height)}px`,
     };
     setSelectedDivInfo(info);
-    setSelectedDivRect({
-      top: rect.top,
-      left: rect.left,
-      width: rect.width,
-    });
     return info;
   }, []);
 
@@ -325,7 +313,6 @@ export function UiSettingsModal({
       selectedElementRef.current?.classList.remove("ui-inspector-selected");
       selectedElementRef.current = null;
       setSelectedDivInfo(null);
-      setSelectedDivRect(null);
       return;
     }
 
@@ -582,14 +569,12 @@ export function UiSettingsModal({
       setCompactPanel(null);
       setIsCompactInspector(true);
       toast.dismiss();
-      toast.success(`Đã chọn phần tử: ${selector}`);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsInspecting(false);
         toast.dismiss();
-        toast.info("Đã huỷ chọn phần tử.");
       }
     };
 
@@ -610,26 +595,7 @@ export function UiSettingsModal({
     };
   }, [isInspecting, handleSelectorChange]);
 
-  useEffect(() => {
-    if (!isCompactInspector || !selectedElementRef.current) return;
-
-    const updateSelectedPosition = () => {
-      const element = selectedElementRef.current;
-      if (!element || !document.contains(element)) return;
-      const rect = element.getBoundingClientRect();
-      setSelectedDivRect({ top: rect.top, left: rect.left, width: rect.width });
-    };
-
-    updateSelectedPosition();
-    window.addEventListener("scroll", updateSelectedPosition, true);
-    window.addEventListener("resize", updateSelectedPosition);
-    return () => {
-      window.removeEventListener("scroll", updateSelectedPosition, true);
-      window.removeEventListener("resize", updateSelectedPosition);
-    };
-  }, [isCompactInspector, newBg, newColor, newBorder, newRadius, newWidth, newHeight, newFontSize, getCombinedPadding, getCombinedMargin]);
-
-  const addCustomRule = (keepSelection = false): UiSettings | null => {
+  const addCustomRule = (keepSelection = false, notifySuccess = true): UiSettings | null => {
     if (!newSelector.trim()) {
       toast.error("Vui lòng nhập hoặc chọn một CSS selector!");
       return null;
@@ -732,9 +698,10 @@ export function UiSettingsModal({
       selectedElementRef.current?.classList.remove("ui-inspector-selected");
       selectedElementRef.current = null;
       setSelectedDivInfo(null);
-      setSelectedDivRect(null);
     }
-    toast.success(index >= 0 ? "Đã cập nhật style cho selector!" : "Đã thêm style custom cho selector!");
+    if (notifySuccess) {
+      toast.success(index >= 0 ? "Đã cập nhật style cho selector!" : "Đã thêm style custom cho selector!");
+    }
     return updatedSettings;
   };
 
@@ -748,11 +715,10 @@ export function UiSettingsModal({
   }, []);
 
   const applyAndPersistCurrentRule = async (keepSelection = true) => {
-    const updatedSettings = addCustomRule(keepSelection);
+    const updatedSettings = addCustomRule(keepSelection, false);
     if (!updatedSettings) return false;
     try {
       await persistSettings(updatedSettings);
-      toast.success("Đã cố định style của DIV.");
       return true;
     } catch (error) {
       console.error("Failed to persist selected DIV style", error);
@@ -821,7 +787,6 @@ export function UiSettingsModal({
     selectedElementRef.current?.classList.remove("ui-inspector-selected");
     selectedElementRef.current = null;
     setSelectedDivInfo(null);
-    setSelectedDivRect(null);
     resetCustomRuleFields();
     applyUiSettings(persistedSettingsRef.current);
   }, [isOpen, resetCustomRuleFields]);
@@ -874,12 +839,11 @@ export function UiSettingsModal({
   };
 
   const saveCompactSettings = async () => {
-    const updatedSettings = addCustomRule(true);
+    const updatedSettings = addCustomRule(true, false);
     if (!updatedSettings) return;
 
     try {
       await persistSettings(updatedSettings);
-      toast.success("Đã lưu style của DIV!");
       onClose();
     } catch (error) {
       console.error("Failed to save selected DIV style", error);
@@ -969,35 +933,8 @@ export function UiSettingsModal({
         </div>
       )}
 
-      {isCompactInspector && selectedDivInfo && selectedDivRect && (
+      {isCompactInspector && selectedDivInfo && (
         <>
-          <div
-            data-ui-settings-shell="true"
-            className="pointer-events-none fixed z-[100000] overflow-hidden border border-slate-600 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md"
-            style={{
-              top: Math.max(8, selectedDivRect.top - 54),
-              left: Math.max(8, selectedDivRect.left),
-              width: Math.max(260, Math.min(selectedDivRect.width, 620, window.innerWidth - 16)),
-            }}
-          >
-            <div className="flex h-6 items-center gap-2 border-b border-white/10 bg-white/10 px-2 font-mono text-[10px]">
-              <span className="bg-white px-1.5 py-0.5 font-black uppercase text-slate-950">
-                {selectedDivInfo.tag}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-slate-200">{selectedDivInfo.selector}</span>
-            </div>
-            <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1 font-mono text-[9px] text-slate-300">
-              <span>BG <b className="text-white">{newBg || selectedDivInfo.background}</b></span>
-              <span>COLOR <b className="text-white">{newColor || selectedDivInfo.color}</b></span>
-              <span>BORDER <b className="text-white">{newBorder || selectedDivInfo.border}</b></span>
-              <span>RADIUS <b className="text-white">{newRadius || selectedDivInfo.radius}</b></span>
-              <span>FONT <b className="text-white">{newFontSize || selectedDivInfo.fontSize} / {newLineHeight || selectedDivInfo.lineHeight}</b></span>
-              <span>SIZE <b className="text-white">{newWidth || selectedDivInfo.width} × {newHeight || selectedDivInfo.height}</b></span>
-              <span>PADDING <b className="text-white">{getCombinedPadding() || selectedDivInfo.padding}</b></span>
-              <span>MARGIN <b className="text-white">{getCombinedMargin() || selectedDivInfo.margin}</b></span>
-            </div>
-          </div>
-
           {compactPanel && (
             <div
               data-ui-settings-shell="true"

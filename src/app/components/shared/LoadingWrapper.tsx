@@ -1,13 +1,27 @@
+import { useEffect, useState } from "react";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import { motion, AnimatePresence } from "motion/react";
 
 export function LoadingWrapper({ children }: { children: React.ReactNode }) {
   const { isLoading } = useAppData();
+  const [loaderTimedOut, setLoaderTimedOut] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) return;
+
+    const safetyTimer = window.setTimeout(() => {
+      // Storage hydration continues in the background, but a slow/stalled
+      // IndexedDB read must never make the whole application unusable.
+      setLoaderTimedOut(true);
+    }, 1800);
+
+    return () => window.clearTimeout(safetyTimer);
+  }, [isLoading]);
 
   return (
     <>
       <AnimatePresence>
-        {isLoading && (
+        {isLoading && !loaderTimedOut && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
