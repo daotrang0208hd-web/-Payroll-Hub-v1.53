@@ -451,18 +451,23 @@ export function buildBulkPaymentAnalytics({
   const summaryRows = Array.from(buckets.values())
     .map((bucket): PayrollBuMonthSummaryRow => {
       const holdGross = bucket.holdBeforePeriod + bucket.holdInPeriod;
+      const totalPaid = bucket.addBeforePeriod + bucket.addInPeriod;
+      const totalCancelled =
+        bucket.cancelBeforePeriod + bucket.cancelInPeriod;
+
+      // CANCEL loại khoản tiền khỏi vòng đời HOLD nhưng không phải là một lần
+      // thanh toán. Vì vậy CANCEL phải làm giảm số dư, tuyệt đối không cộng
+      // ngược trở lại vào HOLD đầu kỳ hoặc HOLD còn lại.
       const openingBalance = Math.max(
         bucket.holdBeforePeriod -
-          bucket.addBeforePeriod +
+          bucket.addBeforePeriod -
           bucket.cancelBeforePeriod,
         0,
       );
       const remainingBalance = Math.max(
         holdGross -
-          bucket.addBeforePeriod -
-          bucket.addInPeriod +
-          bucket.cancelBeforePeriod +
-          bucket.cancelInPeriod,
+          totalPaid -
+          totalCancelled,
         0,
       );
       const paymentMonths = Array.from(bucket.addPaymentPeriods.values())
@@ -475,10 +480,15 @@ export function buildBulkPaymentAnalytics({
       if (bucket.bonusInPeriod > 0) movements.push("BONUS");
 
       let status = "Chưa thanh toán";
-      if (holdGross <= 0) status = "Không có HOLD";
-      else if (remainingBalance <= 0) status = "Đã tất toán";
-      else if (bucket.addBeforePeriod + bucket.addInPeriod > 0) {
+      if (holdGross <= 0) {
+        status = bucket.cancelInPeriod > 0 ? "Đã hủy" : "Không có HOLD";
+      } else if (remainingBalance <= 0 && totalCancelled > 0) {
+        status = "Đã hủy";
+      } else if (remainingBalance <= 0) status = "Đã tất toán";
+      else if (totalPaid > 0) {
         status = "Thanh toán một phần";
+      } else if (totalCancelled > 0) {
+        status = "Đã hủy một phần";
       }
 
       return {
