@@ -1,27 +1,37 @@
-# Design QA — Payroll Hub reconciliation fixes
+# Design QA — Unified Trial Balance frame
 
-## Compared states
+## Visual sources and tested state
 
-- Reference: `upload/9e8da353-244a-40bb-a592-8d5cbe117a3e.png` (Timesheet upload table, 1884×825).
-- Implementation: cloud-browser capture of Timesheet upload configuration at 1365×936.
-- Additional implementation check: cloud-browser capture of Master upload configuration at 1365×936.
+- Reference: `/workspace/scratch/b2cc3a4694a9/upload/b3efb19d-c31c-4e87-836e-9c1aebbb974a.png` (1584×358).
+- Implementation: cloud-browser capture of `/hold-dashboard` at 1363×936, device pixel ratio 1.
+- Focused comparison: reference and the implementation's 1363×260 title/table region were opened together in one comparison input.
+- The local preview has no Trial Balance rows, while the reference is populated. QA therefore compared the requested frame structure, title positioning, horizontal padding, and title-to-grid seam rather than row values.
 
-The reference and implementation use different row contents and viewport sizes, so the comparison focused on the requested upload-table frame: outer boundary, corner radius, clipping, header alignment, and footer containment.
+## Comparison history
+
+1. After removing the redundant outer card and intermediate content wrapper, legacy positional CSS still added a 12px spacer above the grid and expanded the summary area to about 128px. This pass was blocked.
+2. Scoped Trial Balance identifiers and high-specificity normalization removed the legacy padding and restored the 38px summary row. The final capture has a continuous title-to-grid seam and matches the requested structure.
+
+## Measured final result
+
+- Trial Balance title/header horizontal padding: 12px left, 12px right.
+- Gap between the header bottom and the table body top: 0px.
+- Frame padding: 0px.
+- Header, table body, and pagination footer are direct siblings inside one `trial-balance-frame`.
+- Summary row height: 38px.
 
 ## Findings
 
 - P0: none.
 - P1: none.
 - P2: none.
-- The Timesheet upload table now has a continuous rounded outer frame with content clipped inside it.
-- The Master upload table uses the same rounded frame treatment and keeps its empty state and footer within the boundary.
-- Navigation, table headers, and action controls remain aligned at the tested desktop viewport.
-- Date filter values render as valid `dd/MM/yyyy` options and no longer expose `undefined/undefined` strings.
+- The title and table are now visually and structurally part of one frame, with no pair of blank wrapper regions between them.
 
 ## Verification
 
-- Production build: passed.
-- Browser interaction: passed for Timesheet upload, Master upload, Deductions title/TOTAL PAYMENT, Date filter, and Balance route.
+- Settings control: opens and closes successfully.
 - Application console errors: 0 (browser-extension logs excluded).
+- Production build: passed.
+- Diff whitespace check: passed.
 
 final result: passed

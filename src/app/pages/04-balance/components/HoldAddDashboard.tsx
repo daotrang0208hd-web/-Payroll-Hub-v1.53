@@ -2327,15 +2327,15 @@ export function HoldAddDashboard() {
   }, [data]);
 
   return (
-    <div className="unified-table-frame h-full flex-1 flex flex-col min-h-0 overflow-hidden bg-transparent w-full" style={{ borderRadius: "0px" }}>
+    <div className="trial-balance-frame unified-table-frame h-full flex-1 flex flex-col min-h-0 overflow-hidden bg-transparent w-full" style={{ borderRadius: "0px" }}>
       {/* Toolbar */}
-      <div 
-        className="unified-table-frame-header flex-shrink-0 bg-transparent px-0 py-0 flex items-center justify-between"
-        style={{ height: "62.9735px", minHeight: "62.9735px", paddingTop: "0px", paddingBottom: "0px", paddingLeft: "0px", paddingRight: "0px", borderRadius: "0px" }}
+      <div
+        className="trial-balance-header unified-table-frame-header flex-shrink-0 bg-transparent py-0 flex items-center justify-between"
+        style={{ height: "62.9735px", minHeight: "62.9735px", paddingTop: "0px", paddingBottom: "0px", paddingLeft: "12px", paddingRight: "12px", borderRadius: "0px" }}
       >
-        <div className="w-full flex items-center justify-between flex-wrap gap-3 py-2 px-4 h-full" style={{ borderRadius: "0px" }}>
+        <div className="trial-balance-header-content w-full flex items-center justify-between flex-wrap gap-3 py-2 h-full" style={{ borderRadius: "0px" }}>
           {/* Summary Pills on Top Header Bar (Replacing Payroll Hub title & icon) */}
-          <div className="flex items-center gap-2 flex-wrap" style={{ borderRadius: "0px", minHeight: "38px" }}>
+          <div id="trial-balance-summary" className="flex items-center gap-2 flex-wrap" style={{ borderRadius: "0px", minHeight: "38px" }}>
             <span className="text-[12px] font-black tracking-widest uppercase text-[#600032] dark:text-rose-300 font-sans mr-1 inline-flex items-center gap-1.5">
               <Scale className="w-4 h-4 text-primary shrink-0" />
               TRIAL BALANCE
@@ -2474,11 +2474,11 @@ export function HoldAddDashboard() {
           </div>
         </div>
       </div>
-      <div className="flex-1 flex flex-col min-h-0 bg-transparent relative">
-        <div 
-          className="table-body-region flex-1 min-h-0 overflow-auto custom-scrollbar border-0 shadow-none"
-          style={{ borderRadius: "0px" }}
-        >
+      <div
+        id="trial-balance-table-body"
+        className="table-body-region flex-1 min-h-0 overflow-auto custom-scrollbar border-0 shadow-none"
+        style={{ borderRadius: "0px" }}
+      >
           <table
             className="trial-balance-table w-full border-separate border-spacing-0 table-auto bg-white dark:bg-card"
             style={{
@@ -3009,13 +3009,13 @@ export function HoldAddDashboard() {
               </tr>
             </tfoot>
           </table>
-        </div>
+      </div>
 
-        {/* Caption & Footer Pagination Controls */}
-        <div 
-          className="table-footer-pagination flex-shrink-0 py-2 px-4 bg-[#FDFBF7] dark:bg-slate-900 flex items-center justify-between gap-3 text-xs w-full"
-          style={{ height: "50.9848px", minHeight: "50.9848px" }}
-        >
+      {/* Caption & Footer Pagination Controls */}
+      <div
+        className="table-footer-pagination flex-shrink-0 py-2 px-4 bg-[#FDFBF7] dark:bg-slate-900 flex items-center justify-between gap-3 text-xs w-full"
+        style={{ height: "50.9848px", minHeight: "50.9848px" }}
+      >
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 font-sans">
               Hiển thị:
@@ -3044,7 +3044,6 @@ export function HoldAddDashboard() {
           <div className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 font-sans">
             Tổng số: {monthKeys.length} kỳ ({currentPeriodRows.length} dòng dữ liệu)
           </div>
-        </div>
       </div>
     </div>
   );
