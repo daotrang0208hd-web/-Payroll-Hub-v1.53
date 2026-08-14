@@ -601,7 +601,18 @@ export function scoreMatch(
   return bestTokenScore >= 60 ? Math.min(79, bestTokenScore) : 0;
 }
 export function normalizeId(id: any): string { return String(id); }
-export function toVietnamDateString(date: Date): string { return String(date); }
+export function toVietnamDateString(date: Date): string {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+
+  // Timesheet filters compare this value with the ISO date keys produced by
+  // the month selector (YYYY-MM-DD). Returning Date#toString here previously
+  // produced values such as "Mon Jun 01 2026...", so valid rows were removed
+  // by the lexical range comparison and monthly results were incomplete.
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 export function generateUUID(): string { return Math.random().toString(); }
 export async function fetchGoogleSheetAsFile(
   url: string,
