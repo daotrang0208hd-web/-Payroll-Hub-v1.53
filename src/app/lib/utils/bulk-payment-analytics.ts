@@ -420,17 +420,23 @@ export function buildBulkPaymentAnalytics({
     );
     if (reportCompare > 0 || occurrenceCompare > 0) return;
 
+    // Dòng HOLD của tháng cũ thường tiếp tục xuất hiện trong file kỳ sau để
+    // theo dõi số dư. Chỉ kỳ báo cáo trùng tháng phát sinh mới được ghi nhận
+    // HOLD gốc; nếu không, cùng một khoản sẽ bị cộng lại ở số dư đầu kỳ.
+    if (
+      entry.operation === "HOLD" &&
+      entry.reportPeriod.key !== entry.occurrencePeriod.key
+    ) {
+      return;
+    }
+
     const key = `${entry.business}|${entry.occurrencePeriod.key}`;
     const bucket =
       buckets.get(key) || createBucket(entry.business, entry.occurrencePeriod);
 
     if (entry.operation === "HOLD") {
-      // HOLD phat sinh thuoc ky nao duoc xac dinh boi "Thang phat sinh",
-      // khong phai boi thang bao cao cua dong du lieu. Mot khoan HOLD cu co the
-      // tiep tuc xuat hien trong file cua ky hien tai, nhung no chi la so du dau
-      // ky va tuyet doi khong duoc ghi nhan lai vao HOLD phat sinh tai ky.
       if (occurrenceCompare < 0) bucket.holdBeforePeriod += entry.amount;
-      else if (occurrenceCompare === 0 && reportCompare === 0) {
+      else if (occurrenceCompare === 0) {
         bucket.holdInPeriod += entry.amount;
       }
     } else if (entry.operation === "ADD") {
