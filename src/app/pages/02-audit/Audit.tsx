@@ -1504,11 +1504,11 @@ export function Audit() {
         >
           <div className="absolute inset-0 bg-pattern-green opacity-[0.02] pointer-events-none" />
           <div 
-            className="unified-table-frame-header px-6 md:px-8 py-2.5 flex items-center justify-between border-b border-emerald-50 bg-white shrink-0 relative z-[200] rounded-t-none"
+            className="unified-table-frame-header relative z-[200] flex min-h-[50px] shrink-0 items-center justify-between gap-3 rounded-t-none border-b border-emerald-50 bg-white px-3 py-2"
             style={{ borderColor: "#e6e6e6" }}
           >
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <button
                   onClick={() => setIsConfigHidden(!isConfigHidden)}
                   className="flex items-center justify-center rounded-full border border-slate-200/90 bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 transition-all shadow-xs cursor-pointer w-7 h-7 p-0 active:scale-95 shrink-0"
@@ -1517,15 +1517,14 @@ export function Audit() {
                 >
                   <PanelLeft className="w-3.5 h-3.5 text-primary" />
                 </button>
-                {/* Section title or status could go here */}
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/40">
+                <span className="truncate text-[11px] font-black uppercase tracking-[0.24em] text-primary/65">
                   Audit reconciliation
                 </span>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4">
-              <div className="flex items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="flex items-center gap-2">
               <AnimatePresence>
                 {(searchTerm || selectedDetailRow) && (
                   <motion.button
@@ -1533,7 +1532,7 @@ export function Audit() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
                     onClick={clearAllFilters}
-                    className="px-4 py-2 bg-rose-50 text-rose-600 border border-rose-100 rounded-[20px] text-[0.65rem] font-bold uppercase tracking-widest hover:bg-rose-100 transition-colors flex items-center gap-2 shadow-xs"
+                    className="flex h-8 items-center gap-1.5 border border-rose-100 bg-rose-50 px-3 text-[0.6rem] font-bold uppercase tracking-wider text-rose-600 shadow-xs transition-colors hover:bg-rose-100"
                     style={{ borderRadius: "20px" }}
                   >
                     <Trash2 className="w-3 h-3" />

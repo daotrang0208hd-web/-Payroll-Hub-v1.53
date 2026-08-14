@@ -1865,6 +1865,37 @@ div.audit-data-table-wrapper {
 .audit-source-card {
   border-radius: 0 !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  border-color: color-mix(in srgb, var(--primary, #781d1d) 22%, var(--border, #cbd5e1)) !important;
+  background: color-mix(in srgb, var(--primary, #781d1d) 6%, var(--card, #ffffff)) !important;
+}
+
+.audit-source-card > :first-child {
+  border-bottom-color: color-mix(in srgb, var(--primary, #781d1d) 18%, var(--border, #cbd5e1)) !important;
+  background: color-mix(in srgb, var(--primary, #781d1d) 12%, var(--card, #ffffff)) !important;
+  color: color-mix(in srgb, var(--primary, #781d1d) 82%, var(--foreground, #0f172a)) !important;
+}
+
+.audit-source-card > :last-child:not(:first-child) {
+  background: color-mix(in srgb, var(--primary, #781d1d) 5%, var(--card, #ffffff)) !important;
+}
+
+/* Audit columns are grouped by meaning and follow the user's selected theme. */
+.audit-group-common-header {
+  background: color-mix(in srgb, var(--primary, #781d1d) 16%, var(--card, #ffffff)) !important;
+  color: color-mix(in srgb, var(--primary, #781d1d) 88%, var(--foreground, #0f172a)) !important;
+}
+
+.audit-group-hours-header {
+  background: color-mix(in srgb, var(--harmony-complement, #1d5f78) 18%, var(--card, #ffffff)) !important;
+  color: color-mix(in srgb, var(--harmony-complement, #1d5f78) 88%, var(--foreground, #0f172a)) !important;
+}
+
+.audit-group-common-cell {
+  background: color-mix(in srgb, var(--primary, #781d1d) 4%, var(--card, #ffffff)) !important;
+}
+
+.audit-group-hours-cell {
+  background: color-mix(in srgb, var(--harmony-complement, #1d5f78) 5%, var(--card, #ffffff)) !important;
 }
 
 /* Trial Balance month totals: stronger than details, with CK balance emphasized. */

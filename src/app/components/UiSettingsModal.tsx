@@ -1,6 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { X, Settings2, Trash2, Target, ChevronDown } from "lucide-react";
+import {
+  X,
+  Settings2,
+  Trash2,
+  Target,
+  ChevronDown,
+  PaintBucket,
+  Type,
+  SquareDashed,
+  Maximize2,
+  PanelTopOpen,
+  Check,
+} from "lucide-react";
 import { toast } from "sonner";
 import localforage from "localforage";
 import { useAppData } from "../lib/contexts/AppDataContext";
@@ -48,6 +60,26 @@ const cleanUnit = (val: string) => {
   return val;
 };
 
+interface SelectedDivInfo {
+  tag: string;
+  selector: string;
+  background: string;
+  color: string;
+  border: string;
+  radius: string;
+  padding: string;
+  margin: string;
+  fontSize: string;
+  width: string;
+  height: string;
+}
+
+interface SelectedDivRect {
+  top: number;
+  left: number;
+  width: number;
+}
+
 export function UiSettingsModal({
   isOpen,
   onClose,
@@ -83,6 +115,10 @@ export function UiSettingsModal({
   const [marRight, setMarRight] = useState("");
   const [marBottom, setMarBottom] = useState("");
   const [marLeft, setMarLeft] = useState("");
+  const selectedElementRef = useRef<HTMLElement | null>(null);
+  const [selectedDivInfo, setSelectedDivInfo] = useState<SelectedDivInfo | null>(null);
+  const [selectedDivRect, setSelectedDivRect] = useState<SelectedDivRect | null>(null);
+  const [isCompactInspector, setIsCompactInspector] = useState(false);
 
   // Dynamic selector values helper for padding/margin
   const getCombinedPadding = useCallback(() => {
@@ -143,12 +179,51 @@ export function UiSettingsModal({
     setNewFontSize("");
   }, [updatePaddingStates, updateMarginStates]);
 
-  const handleSelectorChange = useCallback((selector: string, _targetElement?: HTMLElement) => {
+  const captureSelectedElement = useCallback((element: HTMLElement, selector: string) => {
+    const computed = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    selectedElementRef.current = element;
+    setSelectedDivInfo({
+      tag: element.tagName.toLowerCase(),
+      selector,
+      background: computed.backgroundColor,
+      color: computed.color,
+      border: computed.border,
+      radius: computed.borderRadius,
+      padding: computed.padding,
+      margin: computed.margin,
+      fontSize: computed.fontSize,
+      width: `${Math.round(rect.width)}px`,
+      height: `${Math.round(rect.height)}px`,
+    });
+    setSelectedDivRect({
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+    });
+  }, []);
+
+  const handleSelectorChange = useCallback((selector: string, targetElement?: HTMLElement) => {
     setNewSelector(selector);
     const cleanSelector = selector.trim();
     if (!cleanSelector) {
       resetCustomRuleFields();
+      selectedElementRef.current = null;
+      setSelectedDivInfo(null);
+      setSelectedDivRect(null);
       return;
+    }
+
+    let resolvedElement = targetElement;
+    if (!resolvedElement && isSafeCustomSelector(cleanSelector)) {
+      try {
+        resolvedElement = document.querySelector<HTMLElement>(cleanSelector) || undefined;
+      } catch {
+        resolvedElement = undefined;
+      }
+    }
+    if (resolvedElement) {
+      captureSelectedElement(resolvedElement, cleanSelector);
     }
 
     const existingRule = settings.customRules?.find(
@@ -170,7 +245,7 @@ export function UiSettingsModal({
       // layout even when the user only intended to change one property.
       resetCustomRuleFields();
     }
-  }, [settings.customRules, resetCustomRuleFields, updatePaddingStates, updateMarginStates]);
+  }, [settings.customRules, resetCustomRuleFields, updatePaddingStates, updateMarginStates, captureSelectedElement]);
 
   // State and effect for element inspector mode
   const [isInspecting, setIsInspecting] = useState(false);
@@ -198,7 +273,7 @@ export function UiSettingsModal({
       const target = e.target as HTMLElement;
       
       // Do not highlight elements inside the settings panel itself
-      if (target.closest(".fixed.inset-0") || target.closest(".fixed.top-4")) return;
+      if (target.closest('[data-ui-settings-shell="true"]')) return;
 
       if (activeEl && activeEl !== target) {
         activeEl.classList.remove("inspector-hovered");
@@ -352,11 +427,12 @@ export function UiSettingsModal({
       e.stopPropagation();
 
       const target = e.target as HTMLElement;
-      if (target.closest(".fixed.inset-0") || target.closest(".fixed.top-4")) return;
+      if (target.closest('[data-ui-settings-shell="true"]')) return;
 
       const selector = getReadableSelector(target);
       handleSelectorChange(selector, target);
       setIsInspecting(false);
+      setIsCompactInspector(true);
       toast.dismiss();
       toast.success(`Đã chọn phần tử: ${selector}`);
     };
@@ -386,15 +462,34 @@ export function UiSettingsModal({
     };
   }, [isInspecting, handleSelectorChange]);
 
-  const addCustomRule = () => {
+  useEffect(() => {
+    if (!isCompactInspector || !selectedElementRef.current) return;
+
+    const updateSelectedPosition = () => {
+      const element = selectedElementRef.current;
+      if (!element || !document.contains(element)) return;
+      const rect = element.getBoundingClientRect();
+      setSelectedDivRect({ top: rect.top, left: rect.left, width: rect.width });
+    };
+
+    updateSelectedPosition();
+    window.addEventListener("scroll", updateSelectedPosition, true);
+    window.addEventListener("resize", updateSelectedPosition);
+    return () => {
+      window.removeEventListener("scroll", updateSelectedPosition, true);
+      window.removeEventListener("resize", updateSelectedPosition);
+    };
+  }, [isCompactInspector, newBg, newColor, newBorder, newRadius, newWidth, newHeight, newFontSize, getCombinedPadding, getCombinedMargin]);
+
+  const addCustomRule = (keepSelection = false): UiSettings | null => {
     if (!newSelector.trim()) {
       toast.error("Vui lòng nhập hoặc chọn một CSS selector!");
-      return;
+      return null;
     }
     const cleanSelector = newSelector.trim();
     if (!isSafeCustomSelector(cleanSelector)) {
       toast.error("CSS selector không hợp lệ. Vui lòng chọn lại phần tử.");
-      return;
+      return null;
     }
 
     const normalizedRadius = normalizeCssLength(newRadius);
@@ -416,7 +511,7 @@ export function UiSettingsModal({
     );
     if (!hasOverride) {
       toast.error("Hãy nhập ít nhất một thuộc tính cần thay đổi.");
-      return;
+      return null;
     }
 
     const supports = (property: string, value?: string) =>
@@ -433,7 +528,7 @@ export function UiSettingsModal({
       !supports("font-size", normalizedFontSize)
     ) {
       toast.error("Có giá trị CSS không hợp lệ. Vui lòng kiểm tra lại đơn vị hoặc màu.");
-      return;
+      return null;
     }
 
     const existingRules = settings.customRules || [];
@@ -461,12 +556,18 @@ export function UiSettingsModal({
       updatedRules = [...existingRules, newRule];
     }
 
-    setSettings({ ...settings, customRules: updatedRules });
+    const updatedSettings = { ...settings, customRules: updatedRules };
+    setSettings(updatedSettings);
     
-    // Reset form inputs
-    setNewSelector("");
-    resetCustomRuleFields();
+    if (!keepSelection) {
+      setNewSelector("");
+      resetCustomRuleFields();
+      selectedElementRef.current = null;
+      setSelectedDivInfo(null);
+      setSelectedDivRect(null);
+    }
     toast.success(index >= 0 ? "Đã cập nhật style cho selector!" : "Đã thêm style custom cho selector!");
+    return updatedSettings;
   };
 
   const removeCustomRule = (id: string) => {
@@ -499,7 +600,11 @@ export function UiSettingsModal({
     if (!wasOpenRef.current) return;
     wasOpenRef.current = false;
     setIsInspecting(false);
+    setIsCompactInspector(false);
     setNewSelector("");
+    selectedElementRef.current = null;
+    setSelectedDivInfo(null);
+    setSelectedDivRect(null);
     resetCustomRuleFields();
     applyUiSettings(persistedSettingsRef.current);
   }, [isOpen, resetCustomRuleFields]);
@@ -544,6 +649,24 @@ export function UiSettingsModal({
     onClose();
   };
 
+  const saveCompactSettings = async () => {
+    const updatedSettings = addCustomRule(true);
+    if (!updatedSettings) return;
+
+    try {
+      await localforage.setItem(UI_SETTINGS_KEY, updatedSettings);
+      persistedSettingsRef.current = updatedSettings;
+      const { bgImage, ...smallSettings } = updatedSettings;
+      localStorage.setItem(UI_SETTINGS_KEY + "_small", JSON.stringify(smallSettings));
+      window.dispatchEvent(new Event("ui-settings-changed"));
+      toast.success("Đã lưu style của DIV!");
+      onClose();
+    } catch (error) {
+      console.error("Failed to save selected DIV style", error);
+      toast.error("Không thể lưu style của DIV.");
+    }
+  };
+
   const resetSettings = async () => {
     toast.info("Đang reset cài đặt...");
     setSettings(defaultSettings);
@@ -557,26 +680,6 @@ export function UiSettingsModal({
     window.dispatchEvent(new Event("ui-settings-changed"));
     applyUiSettings(defaultSettings);
     onClose();
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Ảnh quá lớn! Vui lòng chọn ảnh dưới 5MB.");
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSettings({ ...settings, bgImage: reader.result as string });
-      };
-      reader.onerror = () => {
-        toast.error("Có lỗi khi đọc file ảnh.");
-      };
-      reader.readAsDataURL(file);
-    }
   };
 
   const handleClearAll = () => {
@@ -620,9 +723,9 @@ export function UiSettingsModal({
   return (
     <>
       {isInspecting && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-[#6b2636] text-white px-4 py-2.5 rounded-lg shadow-2xl z-[100001] flex items-center gap-3 border-2 border-white font-sans text-xs font-bold pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">
+        <div data-ui-settings-shell="true" className="fixed top-4 left-1/2 -translate-x-1/2 bg-[#6b2636] text-white px-4 py-2.5 rounded-lg shadow-2xl z-[100001] flex items-center gap-3 border-2 border-white font-sans text-xs font-bold pointer-events-auto select-none animate-in fade-in slide-in-from-top-4 duration-300">
           <Target className="w-4 h-4 animate-pulse text-rose-300" />
-          <span>🔍 Di chuột & Click vào phần tử trên màn hình để chọn. Nhấn ESC để huỷ.</span>
+          <span>Di chuột và click vào phần tử trên màn hình để chọn. Nhấn ESC để huỷ.</span>
           <button
             type="button"
             onClick={() => setIsInspecting(false)}
@@ -633,9 +736,99 @@ export function UiSettingsModal({
         </div>
       )}
 
+      {isCompactInspector && selectedDivInfo && selectedDivRect && (
+        <>
+          <div
+            data-ui-settings-shell="true"
+            className="pointer-events-none fixed z-[100000] overflow-hidden border border-slate-600 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md"
+            style={{
+              top: Math.max(8, selectedDivRect.top - 54),
+              left: Math.max(8, selectedDivRect.left),
+              width: Math.max(260, Math.min(selectedDivRect.width, 620, window.innerWidth - 16)),
+            }}
+          >
+            <div className="flex h-6 items-center gap-2 border-b border-white/10 bg-white/10 px-2 font-mono text-[10px]">
+              <span className="bg-white px-1.5 py-0.5 font-black uppercase text-slate-950">
+                {selectedDivInfo.tag}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-slate-200">{selectedDivInfo.selector}</span>
+            </div>
+            <div className="flex h-7 items-center gap-x-3 overflow-hidden px-2 font-mono text-[9px] text-slate-300">
+              <span>BG <b className="text-white">{newBg || selectedDivInfo.background}</b></span>
+              <span>COLOR <b className="text-white">{newColor || selectedDivInfo.color}</b></span>
+              <span>BORDER <b className="text-white">{newBorder || selectedDivInfo.border}</b></span>
+              <span>RADIUS <b className="text-white">{newRadius || selectedDivInfo.radius}</b></span>
+            </div>
+          </div>
+
+          <div
+            data-ui-settings-shell="true"
+            className="fixed bottom-5 left-1/2 z-[100001] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-stretch overflow-x-auto border border-white/15 bg-[#1f1f21] text-white shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setIsCompactInspector(false);
+                setIsInspecting(true);
+              }}
+              className="flex min-w-14 items-center justify-center border-r border-white/10 px-3 hover:bg-white/10"
+              title="Chọn DIV khác"
+            >
+              <Target className="h-4 w-4" />
+            </button>
+            {[
+              { label: "Nền", icon: PaintBucket, value: newBg, fallback: selectedDivInfo.background, setter: setNewBg },
+              { label: "Chữ", icon: Type, value: newColor, fallback: selectedDivInfo.color, setter: setNewColor },
+              { label: "Viền", icon: SquareDashed, value: newBorder, fallback: selectedDivInfo.border, setter: setNewBorder },
+              { label: "Bo góc", icon: Maximize2, value: newRadius, fallback: selectedDivInfo.radius, setter: setNewRadius },
+            ].map(({ label, icon: Icon, value, fallback, setter }) => (
+              <label key={label} className="flex min-w-32 items-center gap-2 border-r border-white/10 px-3 py-2">
+                <Icon className="h-4 w-4 shrink-0 text-slate-300" />
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                  <input
+                    value={value}
+                    onChange={(event) => setter(event.target.value)}
+                    placeholder={fallback}
+                    aria-label={`Chỉnh ${label.toLowerCase()} của DIV`}
+                    className="w-24 border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none placeholder:text-slate-400"
+                  />
+                </span>
+              </label>
+            ))}
+            <button
+              type="button"
+              onClick={() => setIsCompactInspector(false)}
+              className="flex min-w-16 flex-col items-center justify-center border-r border-white/10 px-3 text-[8px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white"
+              title="Mở bảng cài đặt đầy đủ"
+            >
+              <PanelTopOpen className="mb-1 h-4 w-4" />
+              Mở rộng
+            </button>
+            <button
+              type="button"
+              onClick={() => addCustomRule(true)}
+              className="flex min-w-16 flex-col items-center justify-center border-r border-white/10 px-3 text-[8px] font-black uppercase tracking-wider text-slate-300 hover:bg-white/10 hover:text-white"
+              title="Áp dụng style vào danh sách"
+            >
+              <Check className="mb-1 h-4 w-4" />
+              Áp dụng
+            </button>
+            <button
+              type="button"
+              onClick={saveCompactSettings}
+              className="min-w-20 bg-white px-4 text-[10px] font-black uppercase tracking-widest text-slate-950 hover:bg-slate-200"
+            >
+              Lưu
+            </button>
+          </div>
+        </>
+      )}
+
       <div 
+        data-ui-settings-shell="true"
         className={`fixed inset-0 z-[10000] flex items-center justify-center p-4 transition-all duration-300 ${
-          isInspecting 
+          isInspecting || isCompactInspector
             ? "bg-transparent pointer-events-none" 
             : "bg-black/45 backdrop-blur-sm pointer-events-auto overflow-y-auto"
         }`}
@@ -643,7 +836,7 @@ export function UiSettingsModal({
       >
         <div 
           className={`bg-white border-4 border-primary rounded-2xl shadow-hard-lg max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden transition-all duration-300 pointer-events-auto ${
-            isInspecting ? "opacity-0 pointer-events-none scale-95 invisible" : "scale-100"
+            isInspecting || isCompactInspector ? "opacity-0 pointer-events-none scale-95 invisible" : "scale-100"
           }`}
           onClick={(e) => e.stopPropagation()}
         >
@@ -982,7 +1175,7 @@ export function UiSettingsModal({
 
                       <button
                         type="button"
-                        onClick={addCustomRule}
+                        onClick={() => addCustomRule()}
                         className="mt-2 w-full bg-primary text-white hover:bg-primary/90 font-bold py-1.5 rounded transition-all text-[0.65rem] uppercase tracking-wider cursor-pointer"
                       >
                         ÁP DỤNG STYLE MỚI
@@ -1074,127 +1267,6 @@ export function UiSettingsModal({
                       <p className="text-[10px] text-gray-500 font-medium">
                         * Thay đổi giao diện mẫu sẽ tự động cấu hình các thông số màu sắc, bo góc và phông chữ của bảng theo chuẩn Taste-Skill.
                       </p>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label className="font-bold text-[0.8125rem]">
-                        Ảnh nền (Background Image)
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <label className="flex-1 cursor-pointer bg-white border-2 border-primary rounded-lg p-2 text-center text-xs font-bold shadow-hard-sm hover:bg-primary/5 transition-all">
-                          {settings.bgImage ? "Đổi ảnh nền" : "Tải ảnh lên"}
-                          <input
-                            type="file"
-                            id="bg-image-upload"
-                            name="bg-image-upload"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => handleImageUpload(e)}
-                          />
-                        </label>
-                        {settings.bgImage && (
-                          <button
-                            onClick={() => setSettings({ ...settings, bgImage: "" })}
-                            aria-label="Xóa ảnh nền"
-                            className="p-2 border-2 border-destructive text-destructive rounded-lg shadow-hard-sm hover:bg-destructive/10 transition-all"
-                            title="Xóa ảnh nền"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      {(settings.bgImage ||
-                        settings.bgImageStyle?.startsWith("brand-stripes-")) && (
-                        <>
-                          <div
-                            className="h-24 w-full rounded-lg mt-1 border border-primary/20"
-                            style={{
-                              backgroundImage:
-                                settings.bgImageStyle === "brand-stripes-purple"
-                                  ? "var(--pattern-stripes-purple)"
-                                  : settings.bgImageStyle === "brand-stripes-green"
-                                    ? "var(--pattern-stripes-green)"
-                                    : settings.bgImageStyle === "brand-stripes-brown"
-                                      ? "var(--pattern-stripes-brown)"
-                                      : `url(${settings.bgImage})`,
-                              backgroundSize:
-                                settings.bgImageStyle === "pattern-sm"
-                                  ? "30px"
-                                  : settings.bgImageStyle === "pattern-md"
-                                    ? "60px"
-                                    : settings.bgImageStyle === "pattern-lg"
-                                      ? "120px"
-                                      : settings.bgImageStyle?.startsWith(
-                                            "brand-stripes-",
-                                          )
-                                        ? "20px 20px"
-                                        : "cover",
-                              backgroundRepeat:
-                                settings.bgImageStyle?.startsWith("pattern") ||
-                                settings.bgImageStyle?.startsWith("brand-stripes")
-                                  ? "repeat"
-                                  : "no-repeat",
-                              backgroundPosition: settings.bgImageStyle?.startsWith(
-                                "pattern",
-                              )
-                                ? "top left"
-                                : "center",
-                              opacity: (settings.bgImageOpacity ?? 100) / 100,
-                            }}
-                          />
-                          <div className="flex flex-col gap-1 mt-1">
-                            <label
-                              htmlFor="bg-image-style"
-                              className="font-bold text-[0.8125rem]"
-                            >
-                              Kiểu hiển thị ảnh
-                            </label>
-                            <select
-                              id="bg-image-style"
-                              value={settings.bgImageStyle || "cover"}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  bgImageStyle: e.target.value as any,
-                                })
-                              }
-                              className="w-full border-2 border-primary rounded-lg p-2 font-bold text-sm outline-none focus:shadow-hard-sm transition-all bg-white"
-                            >
-                              <option value="cover">Lấp đầy màn hình (Cover)</option>
-                              <option value="contain">Vừa vặn màn hình (Contain)</option>
-                              <option value="original">Kích thước gốc (Original)</option>
-                              <option value="pattern-sm">Nhân bản (Nhỏ)</option>
-                              <option value="pattern-md">Nhân bản (Vừa)</option>
-                              <option value="pattern-lg">Nhân bản (Lớn)</option>
-                              <option value="brand-stripes-purple">Brand: Sọc Tím</option>
-                              <option value="brand-stripes-green">Brand: Sọc Xanh</option>
-                              <option value="brand-stripes-brown">Brand: Sọc Nâu</option>
-                            </select>
-                          </div>
-                          <div className="flex flex-col gap-1 mt-1">
-                            <div className="flex justify-between items-center">
-                              <label className="font-bold text-[0.8125rem]">
-                                Độ đậm nhạt của ảnh
-                              </label>
-                              <span className="text-xs font-bold">
-                                {settings.bgImageOpacity ?? 100}%
-                              </span>
-                            </div>
-                            <input
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={settings.bgImageOpacity ?? 100}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  bgImageOpacity: Number(e.target.value),
-                                })
-                              }
-                              className="w-full accent-primary"
-                            />
-                          </div>
-                        </>
-                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <label

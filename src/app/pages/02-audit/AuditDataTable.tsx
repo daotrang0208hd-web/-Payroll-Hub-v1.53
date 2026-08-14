@@ -531,6 +531,12 @@ const DataRow = React.memo(
 
           const customSpan = row._rowSpans?.[col.key];
           if (customSpan === 0) return null;
+          const groupCellClass =
+            col.group === "THÔNG TIN CHUNG"
+              ? "audit-group-common-cell"
+              : col.group === "CHI TIẾT GIỜ LÀM TA"
+                ? "audit-group-hours-cell"
+                : "";
 
           return (
             <td
@@ -545,6 +551,7 @@ const DataRow = React.memo(
               className={`${col.cellClassName?.includes("whitespace-pre-wrap") ? "" : "whitespace-nowrap"} select-none ${getAlignment(col)} relative 
               ${isInRange ? "bg-accent/20 z-10" : ""} 
               ${isActive ? "bg-accent/15 z-10 font-medium" : ""} 
+              ${!isInRange && !isActive ? groupCellClass : ""}
               text-[1em] leading-[1.7] font-normal text-foreground border-b border-r border-[var(--grid-line-color,#E2E8F0)] ${col.cellClassName || ""}
             `}
               style={{
@@ -2478,9 +2485,15 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
         : undefined;
 
       const isColFiltered = columnFilters[col.key] instanceof Set && columnFilters[col.key]!.size > 0;
+      const groupHeaderClass =
+        col.group === "THÔNG TIN CHUNG"
+          ? "audit-group-common-header"
+          : col.group === "CHI TIẾT GIỜ LÀM TA"
+            ? "audit-group-hours-header"
+            : "";
       const filteredHeaderClass = isColFiltered
         ? "bg-[#FEF3C7] dark:bg-amber-950/40 border-amber-300 text-amber-900 font-extrabold"
-        : (headerClassName || "bg-[#F3EFE0]");
+        : (groupHeaderClass || headerClassName || "bg-[#F3EFE0]");
 
       return (
         <th
@@ -2643,8 +2656,8 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
                               key={idx} 
                               colSpan={g.count}
                               className={`sticky top-0 z-[70] ${
-                                g.group === 'THÔNG TIN CHUNG' ? 'bg-[#FFF9E6] text-amber-900' :
-                                g.group === 'CHI TIẾT GIỜ LÀM TA' ? 'bg-[#E6FFFA] text-emerald-900' :
+                                g.group === 'THÔNG TIN CHUNG' ? 'audit-group-common-header' :
+                                g.group === 'CHI TIẾT GIỜ LÀM TA' ? 'audit-group-hours-header' :
                                 headerClassName || "bg-[#F3EFE0]"
                               } border-b border-r border-[var(--grid-line-color,#E2E8F0)] py-1 text-[var(--header-font-size,0.6875rem)] font-bold uppercase text-center`}
                             >
@@ -2963,43 +2976,6 @@ export const DataTable = React.forwardRef<DataTableRef, DataTableProps>(
 
               {/* Toolbar Actions */}
               <div className="hidden md:flex items-center gap-1.5 border-l border-slate-200/80 dark:border-slate-800 pl-3">
-                {/* Search trigger */}
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      className={`flex items-center justify-center rounded-full border transition-all shadow-3xs w-6 h-6 ${
-                        searchTerm
-                          ? "bg-amber-500 text-white border-amber-600 font-bold"
-                          : "bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
-                      }`}
-                      title="Tìm kiếm dữ liệu"
-                    >
-                      <Search className="w-3.5 h-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-72 p-2 bg-popover border-border shadow-2xl rounded-xl z-[99999]" align="start">
-                    <div className="flex items-center gap-2">
-                      <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                      <Input
-                        placeholder="Tìm kiếm..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-8 text-xs border-border rounded-full"
-                        autoFocus
-                      />
-                      {searchTerm && (
-                        <button
-                          onClick={() => setSearchTerm("")}
-                          className="text-xs text-muted-foreground hover:text-foreground font-bold p-1"
-                          title="Xóa tìm kiếm"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
                 {/* Column Visibility Settings */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
