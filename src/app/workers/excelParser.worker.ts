@@ -1,6 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as XLSX from "xlsx";
 import { mapExcelRosterRow } from "../lib/utils/roster-row-utils";
+import {
+  createStableTimesheetRowId,
+  dedupeTimesheetRosterRows,
+} from "../lib/utils/timesheet-roster-utils";
 
 export type ExcelDataKind = "roster" | "salary" | "staff" | "cache" | "raw";
 export type ExcelParseMode = "auto" | "roster" | "raw";
@@ -124,16 +128,16 @@ export function parseExcelData(
         dense: true,
       });
 
-  const hasRosterTab = workbook.SheetNames.some(isRosterSheetName);
+  const rosterSheets = workbook.SheetNames.filter(isRosterSheetName);
+  const hasRosterTab = rosterSheets.length > 0;
   const hasGenericDataTab = workbook.SheetNames.some(isGenericDataSheetName);
+  const preferredRosterSheet = rosterSheets.find(
+    (sheetName) => normalizeSheetName(sheetName) === "Q ROSTER",
+  ) || rosterSheets.find(
+    (sheetName) => normalizeSheetName(sheetName) === "ROSTER",
+  ) || rosterSheets[0];
   const sheetsToProcess = hasRosterTab
-    ? workbook.SheetNames.filter(isRosterSheetName).sort((left, right) => {
-        const leftName = normalizeSheetName(left);
-        const rightName = normalizeSheetName(right);
-        if (leftName === "Q ROSTER" && rightName !== "Q ROSTER") return -1;
-        if (rightName === "Q ROSTER" && leftName !== "Q ROSTER") return 1;
-        return workbook.SheetNames.indexOf(left) - workbook.SheetNames.indexOf(right);
-      })
+    ? [preferredRosterSheet]
     : hasGenericDataTab
       ? workbook.SheetNames.filter(isGenericDataSheetName)
       : workbook.SheetNames;
@@ -248,9 +252,15 @@ export function prepareExcelResult(
   if (mode === "raw") return { kind: "raw", rows: rawRows };
   const kind = mode === "roster" ? "roster" : classifyRows(rawRows, fileName);
   if (kind === "roster") {
+    const mappedRows = dedupeTimesheetRosterRows(
+      rawRows.map((row) => mapExcelRosterRow(row, fileName, fileId)),
+    );
     return {
       kind,
-      rows: rawRows.map((row) => mapExcelRosterRow(row, fileName, fileId)),
+      rows: mappedRows.map((row) => ({
+        ...row,
+        _uuid: createStableTimesheetRowId(row, fileId || fileName),
+      })),
     };
   }
 

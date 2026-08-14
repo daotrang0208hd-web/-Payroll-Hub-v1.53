@@ -14,7 +14,11 @@ import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { useAppData } from "../../lib/contexts/AppDataContext";
 import { isSupabaseConfigured } from "../../lib/supabase";
-import { syncRosterToSupabase, SQL_SETUP_SCRIPT } from "../../lib/supabase-sync-utils";
+import {
+  clearSupabaseRosterData,
+  syncRosterToSupabase,
+  SQL_SETUP_SCRIPT,
+} from "../../lib/supabase-sync-utils";
 import { useTimesheetCalculations } from "../../hooks/useTimesheetCalculations";
 import { getDynamicEmployeeColumns, CENTER_COLUMNS } from "../../constants/timesheet-columns";
 import { TimesheetInputTable } from "./components/TimesheetInputTable";
@@ -30,6 +34,9 @@ import {
   resolveTimesheetCenterFromFileName,
   shouldSkipTimesheetSource,
 } from "../../lib/utils/timesheet-input-resolver";
+import {
+  replaceTimesheetRosterRows,
+} from "../../lib/utils/timesheet-roster-utils";
 import { 
   generateUUID, 
   prepareDataForExport,
@@ -494,8 +501,14 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             }
           : r,
         ),
-        Timesheet_Roster: (prev.Timesheet_Roster || []).filter(
-          (r) => !ownedRowIds.has(String(r._rowId || "")),
+        Timesheet_Roster: replaceTimesheetRosterRows(
+          prev.Timesheet_Roster || [],
+          [],
+          {
+            sourceRowIds: ownedRowIds,
+            targetL07: targetRow?.l07,
+            targetAeCode: targetRow?.aeCode,
+          },
         ),
         Q_Salary_Scale: (prev.Q_Salary_Scale || []).filter(
           (r) => !ownedRowIds.has(String(r._rowId || "")),
@@ -509,7 +522,12 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       };
     });
   };
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
+    const confirmed = window.confirm(
+      "Xóa toàn bộ dữ liệu Timesheet hiện tại? Dữ liệu Roster đã lưu trên Supabase cũng sẽ được xóa để không tự tải ngược trở lại.",
+    );
+    if (!confirmed) return;
+
     updateAppData((prev) => ({
       ...prev,
       Timesheet_InputList: (prev.Timesheet_InputList || []).map((r) => ({
@@ -527,8 +545,21 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       Q_Salary_Scale: [],
       Q_Staff: [],
       Q_Cache: [],
-    }));
-    toast?.success("Đã xóa toàn bộ dữ liệu (đã giữ lại thông tin center).");
+      Timesheet_SkipSupabaseRestore: true,
+      Timesheet_LocalClearedAt: new Date().toISOString(),
+    }), false);
+
+    if (isSupabaseConfigured()) {
+      try {
+        await clearSupabaseRosterData();
+        toast.success("Đã xóa dữ liệu Timesheet local và Roster trên Supabase; vẫn giữ danh sách center.");
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(`Đã xóa dữ liệu local nhưng chưa xóa được Supabase: ${message}`);
+      }
+    } else {
+      toast.success("Đã xóa toàn bộ dữ liệu Timesheet local; vẫn giữ danh sách center.");
+    }
   };
 
   const handleClearEmptyL07 = () => {
@@ -595,7 +626,8 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
       updateAppData((prev: AppData) => ({
         ...prev,
         updatedAt: new Date().toISOString(),
-        lastSupabaseSyncAt: new Date().toISOString()
+        lastSupabaseSyncAt: new Date().toISOString(),
+        Timesheet_SkipSupabaseRestore: false,
       }), true);
       toast.success("Đã tự động lưu cứng dữ liệu trên web.");
     } catch (err: unknown) {
@@ -739,18 +771,15 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             ]);
             
             // Remove existing roster rows for this rowId OR for this center/aeCode to overwrite and prevent duplicate entries
-            next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
-              if (ownedRowIds.has(String(r._rowId || ""))) return false;
-              if (targetL07Lower) {
-                const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
-                const rAe = String(r.aeCode || "").trim().toLowerCase();
-                if (rCenter === targetL07Lower) return false;
-                if (aeCodeLower && rAe === aeCodeLower) return false;
-              }
-              return true;
-            });
-
-            next.Timesheet_Roster = next.Timesheet_Roster.concat(mapped);
+            next.Timesheet_Roster = replaceTimesheetRosterRows(
+              next.Timesheet_Roster || [],
+              mapped,
+              {
+                sourceRowIds: ownedRowIds,
+                targetL07: targetL07Lower,
+                targetAeCode: aeCodeLower,
+              },
+            );
             
             const displayDate = customUploadDate || row.date || new Date().toLocaleString("vi-VN", {
               day: "2-digit",
@@ -883,15 +912,15 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         const targetL07 = String(input?.l07 || "").trim().toLowerCase();
         const targetAe = String(input?.aeCode || "").trim().toLowerCase();
 
-        nextRoster = nextRoster.filter((row: Record<string, unknown>) => {
-          if (ownedRowIds.has(String(row._rowId || ""))) return false;
-          if (!targetL07) return true;
-          const rowCenter = String(
-            row.charge_to_center_mkt || row.l07 || "",
-          ).trim().toLowerCase();
-          const rowAe = String(row.aeCode || "").trim().toLowerCase();
-          return rowCenter !== targetL07 && (!targetAe || rowAe !== targetAe);
-        });
+        nextRoster = replaceTimesheetRosterRows(
+          nextRoster,
+          result.parsed.kind === "roster" ? result.parsed.rows : [],
+          {
+            sourceRowIds: ownedRowIds,
+            targetL07,
+            targetAeCode: targetAe,
+          },
+        );
         nextSalary = nextSalary.filter(
           (row: Record<string, unknown>) =>
             !ownedRowIds.has(String(row._rowId || "")),
@@ -911,8 +940,6 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           nextStaff = nextStaff.concat(result.parsed.rows);
         } else if (result.parsed.kind === "cache") {
           nextCache = nextCache.concat(result.parsed.rows);
-        } else {
-          nextRoster = nextRoster.concat(result.parsed.rows);
         }
       });
 
@@ -1005,16 +1032,15 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
           const targetL07Lower = finalL07.trim().toLowerCase();
           const aeCodeLower = (targetRow?.aeCode || centerInfo?.aeCode || "").trim().toLowerCase();
 
-          next.Timesheet_Roster = (next.Timesheet_Roster || []).filter((r: Record<string, unknown>) => {
-            if (ownedRowIds.has(String(r._rowId || ""))) return false;
-            if (targetL07Lower) {
-              const rCenter = String(r.charge_to_center_mkt || r.l07 || "").trim().toLowerCase();
-              const rAe = String(r.aeCode || "").trim().toLowerCase();
-              if (rCenter === targetL07Lower) return false;
-              if (aeCodeLower && rAe === aeCodeLower) return false;
-            }
-            return true;
-          });
+          next.Timesheet_Roster = replaceTimesheetRosterRows(
+            next.Timesheet_Roster || [],
+            parsed.kind === "roster" ? allRows : [],
+            {
+              sourceRowIds: ownedRowIds,
+              targetL07: targetL07Lower,
+              targetAeCode: aeCodeLower,
+            },
+          );
           next.Q_Salary_Scale = (next.Q_Salary_Scale || []).filter(
             (r: Record<string, unknown>) =>
               !ownedRowIds.has(String(r._rowId || "")),
@@ -1034,7 +1060,6 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
             next.Q_Staff = next.Q_Staff.concat(allRows);
           else if (parsed.kind === "cache")
             next.Q_Cache = next.Q_Cache.concat(allRows);
-          else next.Timesheet_Roster = next.Timesheet_Roster.concat(allRows);
 
           const d = new Date();
           const bu =

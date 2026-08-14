@@ -1,4 +1,8 @@
 import { supabase } from "@/lib/supabaseClient";
+import {
+  createStableTimesheetRowId,
+  dedupeTimesheetRosterRows,
+} from "./utils/timesheet-roster-utils";
 
 export const SQL_SETUP_SCRIPT = `-- SQL setup script for Supabase
 CREATE TABLE IF NOT EXISTS roster_cham_cong (
@@ -84,19 +88,67 @@ NOTIFY pgrst, 'reload schema';
 `;
 
 export async function clearSupabaseData() {
-  const { error: error1 } = await supabase.from("roster_cham_cong").delete().neq("id", 0);
+  await clearSupabaseRosterData();
   const { error: error2 } = await supabase.from("nhan_vien").delete().neq("id", 0);
   const { error: error3 } = await supabase.from("thang_luong").delete().neq("id", 0);
 
-  if (error1 && !error1.message.includes('relation "roster_cham_cong" does not exist')) {
-    throw new Error(`Lỗi xóa bảng roster_cham_cong: ${error1.message}`);
-  }
   if (error2 && !error2.message.includes('relation "nhan_vien" does not exist')) {
     throw new Error(`Lỗi xóa bảng nhan_vien: ${error2.message}`);
   }
   if (error3 && !error3.message.includes('relation "thang_luong" does not exist')) {
     throw new Error(`Lỗi xóa bảng thang_luong: ${error3.message}`);
   }
+}
+
+export async function clearSupabaseRosterData() {
+  const { error } = await supabase
+    .from("roster_cham_cong")
+    .delete()
+    .neq("id", 0);
+  if (error && !error.message.includes('relation "roster_cham_cong" does not exist')) {
+    throw new Error(`Lỗi xóa bảng roster_cham_cong: ${error.message}`);
+  }
+}
+
+async function removeStaleSupabaseRosterRows(activeUniqueIds: Set<string>) {
+  const existingRows: Array<{ id: number; unique_id: string | null }> = [];
+  const pageSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("roster_cham_cong")
+      .select("id,unique_id")
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) {
+      throw new Error(`Không thể kiểm tra dữ liệu Roster cũ: ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+    existingRows.push(...data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+    if (existingRows.length > 250_000) {
+      throw new Error("Roster trên Supabase vượt quá giới hạn 250.000 dòng để đối soát an toàn.");
+    }
+  }
+
+  const staleIds = existingRows
+    .filter((row) => !row.unique_id || !activeUniqueIds.has(String(row.unique_id)))
+    .map((row) => row.id);
+
+  for (let index = 0; index < staleIds.length; index += 200) {
+    const chunk = staleIds.slice(index, index + 200);
+    const { error } = await supabase
+      .from("roster_cham_cong")
+      .delete()
+      .in("id", chunk);
+    if (error) {
+      throw new Error(`Không thể xóa dữ liệu Roster cũ bị nhân bản: ${error.message}`);
+    }
+  }
+
+  return staleIds.length;
 }
 
 export async function syncEmployeesToSupabase(
@@ -256,8 +308,9 @@ export async function syncRosterToSupabase(
   };
 
   // Deduplicate roster data by unique_id before syncing to avoid chunk conflicts
-  const uniqueRowsMap = new Map();
-  rosterData.forEach((r, idx) => {
+  const uniqueRowsMap = new Map<string, Record<string, unknown>>();
+  const dedupedRosterData = dedupeTimesheetRosterRows(rosterData);
+  dedupedRosterData.forEach((r) => {
     const ma_nv = String(getVal(r, ["ma_nv", "ID Number", "employeeId", "ID", "Mã NV", "Teacher ID", "Emp ID", "Staff ID", "code", "manv", "id nv"])).trim();
     const rawNgay = String(getVal(r, ["ngay", "Date", "date", "Ngày", "TK_Date", "Session Date", "SessionDate", "Ngày học", "Date of Class", "ScheduleDate", "Ngày làm việc"])).trim();
     const ngay = formatDateForDb(rawNgay) || rawNgay;
@@ -267,7 +320,7 @@ export async function syncRosterToSupabase(
     
     if (!ma_nv && !ngay) return;
 
-    const unique_id = String(r._uuid || r._rowId || `${ma_nv || 'NV'}_${ngay || 'DATE'}_${gio_vao}_${idx}`);
+    const unique_id = createStableTimesheetRowId(r, "SUPABASE");
     
     uniqueRowsMap.set(unique_id, {
       l07: String(getVal(r, ["l07", "trung tâm (l07)", "cơ sở (l07)", "mã l07", "ma l07", "center code", "office code", "Center", "Trung tâm", "trung tam", "Cơ sở", "co so", "center", "chi nhánh", "mã trung tâm", "ma trung tam", "location", "site", "branch", "region", "vùng", "miền", "khu vực", "campus", "office", "area", "ma co so", "mã ae", "ma ae", "ae", "ae code", "ae_code", "ae name", "ae_name", "ae-code"])).trim(),
@@ -357,6 +410,13 @@ export async function syncRosterToSupabase(
 
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
+
+  // The caller supplies the complete active Timesheet snapshot. Reconcile
+  // only after every upsert succeeds so legacy random UUID rows cannot be
+  // loaded back and multiplied during a later session.
+  await removeStaleSupabaseRosterRows(
+    new Set(uniqueRows.map((row) => String(row.unique_id))),
+  );
 
   return { successCount, totalRows: actualTotal };
 }

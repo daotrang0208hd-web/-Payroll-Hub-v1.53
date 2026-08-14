@@ -75,6 +75,9 @@ export interface AppData {
   Q_CheckTAs?: any[];
   updatedAt?: any;
   lastSupabaseSyncAt?: string;
+  /** Prevent automatic Supabase restore after the user explicitly clears Timesheet. */
+  Timesheet_SkipSupabaseRestore?: boolean;
+  Timesheet_LocalClearedAt?: string;
   SavedBal_PayrollTrial?: Record<string, any>;
   SavedPeriods_HoldAdd?: Record<string, boolean>;
   SavedRows_HoldAdd?: Record<string, any[] | undefined>;

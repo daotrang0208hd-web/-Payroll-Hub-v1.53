@@ -381,6 +381,11 @@ export function TimesheetHub() {
         console.log("Supabase is not configured yet. Using local state.");
         return;
       }
+      if (appData.Timesheet_SkipSupabaseRestore) {
+        hasFetchedSupabase = true;
+        console.log("Timesheet was explicitly cleared. Skipping automatic Supabase restore.");
+        return;
+      }
       if (hasFetchedSupabase) {
         console.log("Supabase data already loaded in this session. Skipping auto-fetch on tab switch.");
         return;
@@ -1037,7 +1042,8 @@ export function TimesheetHub() {
       updateAppData((prev: any) => ({
         ...prev,
         updatedAt: new Date().toISOString(),
-        lastSupabaseSyncAt: new Date().toISOString()
+        lastSupabaseSyncAt: new Date().toISOString(),
+        Timesheet_SkipSupabaseRestore: false,
       }), true);
       toast.success("Đã tự động lưu cứng dữ liệu trên web.");
     } catch (err: unknown) {
@@ -1151,7 +1157,8 @@ export function TimesheetHub() {
         Timesheet_Roster: mappedRoster,
         Q_Staff: mappedStaff,
         Q_Salary_Scale: mappedSalary,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        Timesheet_SkipSupabaseRestore: false,
       }), true);
 
       if (loadToastId) {

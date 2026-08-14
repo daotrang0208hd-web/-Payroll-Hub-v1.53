@@ -14,6 +14,7 @@ import {
   mapL07,
 } from "../lib/utils/center-utils";
 import { resolveL07Logic } from "../lib/utils/l07-resolver";
+import { dedupeTimesheetRosterRows } from "../lib/utils/timesheet-roster-utils";
 import {
   DEFAULT_SALARY_SCALES,
   ACADEMIC_FIELDS,
@@ -112,7 +113,11 @@ export function calculateTimesheet(params: any) {
   let dateSkipped = 0;
   let empSkipped = 0;
 
-  rosterData.forEach((t: any) => {
+  // Final safety gate: legacy sessions may already contain copies created by
+  // repeated Google Sheet syncs. Exact logical sessions must be collapsed
+  // before overlap detection and every downstream payroll aggregation.
+  const uniqueRosterData = dedupeTimesheetRosterRows(rosterData);
+  uniqueRosterData.forEach((t: any) => {
     if (discardedLegacyRowIds.has(String(t._rowId || ""))) return;
     const configuredInput = inputListLookup.get(t._rowId) as any;
     const configuredL07 = String(configuredInput?.l07 || "").trim();

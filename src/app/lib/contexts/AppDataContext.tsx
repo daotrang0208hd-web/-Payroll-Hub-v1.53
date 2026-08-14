@@ -16,6 +16,7 @@ import { INITIAL_APP_DATA } from "../../constants/initial-data";
 import { parseMoneyToNumber, removeVietnameseTones, formatIdNumber } from "../utils/data-utils";
 import { resolveL07BuFromAeCode } from "../utils/center-utils";
 import { fillMissingHoldBankAccounts } from "../utils/bank-account-resolver";
+import { dedupeTimesheetRosterRows } from "../utils/timesheet-roster-utils";
 
 // Configure localforage
 localforage.config({
@@ -188,6 +189,17 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           delete legacySaved.Q_Roster;
           delete legacySaved.Q_RosterFileName;
           delete legacySaved.Q_RosterEditHistory;
+
+          if (Array.isArray(saved.Timesheet_Roster)) {
+            const uniqueRoster = dedupeTimesheetRosterRows(saved.Timesheet_Roster);
+            if (uniqueRoster.length !== saved.Timesheet_Roster.length) {
+              saved = { ...saved, Timesheet_Roster: uniqueRoster };
+              await localforage.setItem(
+                getSplitStorageKey("Timesheet_Roster"),
+                uniqueRoster,
+              );
+            }
+          }
 
           SPLIT_STORAGE_FIELDS.forEach((field) => {
             persistedSplitRefs.current.set(field, saved?.[field]);
