@@ -900,7 +900,7 @@ export function TimesheetHub() {
       }
 
       const item = map.get(key)!;
-      const hours = Number(r.duration ?? r.workingHours) || 0;
+      const hours = Number(r.workingHours ?? r.duration) || 0;
       // Value: working hours * 20,000 as requested
       const value = hours * 20000;
 

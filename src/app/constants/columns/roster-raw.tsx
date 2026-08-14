@@ -1,4 +1,5 @@
 import React from "react";
+import { Link2 } from "lucide-react";
 import { formatTime12Hour } from "../../lib/utils/data-utils";
 
 export const ROSTER_RAW_COLUMNS = [
@@ -77,6 +78,15 @@ export const ROSTER_RAW_COLUMNS = [
           <span className={`px-2 py-0.5 rounded-md text-[10px] uppercase tracking-wider shrink-0 ${badgeStyle}`}>
             {badgeLabel}
           </span>
+          {isOverlap && row?.overlap_group && (
+            <span
+              className="inline-flex items-center gap-1 rounded-md border border-rose-400/80 bg-white/80 px-1.5 py-0.5 text-[10px] font-black text-rose-800 shadow-2xs dark:bg-rose-950 dark:text-rose-100"
+              title={`Các dòng cùng nhãn ${row.overlap_group} là những ca trùng lịch với nhau`}
+            >
+              <Link2 className="h-3 w-3" />
+              {row.overlap_group} · CA {row.overlap_position}/{row.overlap_total}
+            </span>
+          )}
           {detailText && (
             <span className="text-[11px] font-bold text-rose-950 dark:text-rose-100 bg-rose-200/90 dark:bg-rose-900/90 px-1.5 py-0.5 rounded border border-rose-300 dark:border-rose-700 leading-tight">
               {detailText}

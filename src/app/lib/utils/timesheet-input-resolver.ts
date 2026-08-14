@@ -20,6 +20,23 @@ function compact(value: unknown): string {
     .replace(/[^A-Z0-9]/g, "");
 }
 
+export function shouldSkipTimesheetSource(...sourceParts: unknown[]): boolean {
+  const normalized = sourceParts
+    .map((part) => {
+      const value = String(part || "");
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    })
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase();
+  return /(?:^|[^A-Z0-9])MKT[\s._-]*HP(?:[^A-Z0-9]|$)/.test(normalized);
+}
+
 /**
  * Match a Timesheet file against the user's configured center list first.
  * The generic filename map is only a fallback for files that are not yet in

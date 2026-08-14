@@ -20,6 +20,12 @@ export interface CustomRule {
   width?: string;
   height?: string;
   fontSize?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  fontStyle?: string;
+  textDecoration?: string;
+  textAlign?: string;
+  lineHeight?: string;
 }
 
 export interface UiSettings {
@@ -676,6 +682,12 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
           ${rule.width ? `width: ${normalizeCssLength(rule.width)} !important;` : ""}
           ${rule.height ? `height: ${normalizeCssLength(rule.height)} !important;` : ""}
           ${rule.fontSize ? `font-size: ${normalizeCssLength(rule.fontSize)} !important;` : ""}
+          ${rule.fontFamily ? `font-family: ${rule.fontFamily} !important;` : ""}
+          ${rule.fontWeight ? `font-weight: ${rule.fontWeight} !important;` : ""}
+          ${rule.fontStyle ? `font-style: ${rule.fontStyle} !important;` : ""}
+          ${rule.textDecoration ? `text-decoration-line: ${rule.textDecoration} !important;` : ""}
+          ${rule.textAlign ? `text-align: ${rule.textAlign} !important;` : ""}
+          ${rule.lineHeight ? `line-height: ${normalizeCssLength(rule.lineHeight)} !important;` : ""}
         }
       `;
     });
@@ -706,6 +718,12 @@ export function applyUiSettings(settings: UiSettings, previewRule?: Partial<Cust
         ${previewRule.width ? `width: ${toPx(previewRule.width)} !important;` : ""}
         ${previewRule.height ? `height: ${toPx(previewRule.height)} !important;` : ""}
         ${previewRule.fontSize ? `font-size: ${toPx(previewRule.fontSize)} !important;` : ""}
+        ${previewRule.fontFamily ? `font-family: ${previewRule.fontFamily} !important;` : ""}
+        ${previewRule.fontWeight ? `font-weight: ${previewRule.fontWeight} !important;` : ""}
+        ${previewRule.fontStyle ? `font-style: ${previewRule.fontStyle} !important;` : ""}
+        ${previewRule.textDecoration ? `text-decoration-line: ${previewRule.textDecoration} !important;` : ""}
+        ${previewRule.textAlign ? `text-align: ${previewRule.textAlign} !important;` : ""}
+        ${previewRule.lineHeight ? `line-height: ${toPx(previewRule.lineHeight)} !important;` : ""}
         
         /* Preview uses paint-only properties so it cannot move other DIVs. */
         outline: 3px solid var(--primary, #3b82f6) !important;

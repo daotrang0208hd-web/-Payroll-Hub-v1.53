@@ -177,7 +177,7 @@ export function calculateTimesheet(params: any) {
     const sourceFile = t._sourceFile || "";
     const fileUpper = String(sourceFile).toUpperCase();
     const bankVal = String(getVal(t, ["bank", "bank name", "bank_name", "ngân hàng", "ngan hang"]) || t.bank || "").trim().toUpperCase();
-    const isMktNorthBank = bankVal === "MKT LOCAL NORTH" || bankVal.startsWith("MKT LOCAL NORTH") || bankVal.includes("MKT NORTH") || fileUpper.includes("MKT_LOCAL_NORTH") || fileUpper.includes("MKT LOCAL NORTH");
+    const isMktNorthBank = bankVal === "MKT LOCAL NORTH" || bankVal.startsWith("MKT LOCAL NORTH") || bankVal.includes("MKT NORTH") || fileUpper.includes("MKT_LOCAL_NORTH") || fileUpper.includes("MKT LOCAL NORTH") || configuredL07.toUpperCase() === "MKT LOCAL NORTH";
 
     if (isMktNorthBank && rawChargeToCenter) {
       rCen = rawChargeToCenter;
@@ -217,7 +217,7 @@ export function calculateTimesheet(params: any) {
     const eH = parseTimeStrToHours(endVal);
     let durationHours = 0;
     if (startVal !== undefined && startVal !== "" && endVal !== undefined && endVal !== "") {
-      durationHours = eH >= sH ? (eH - sH) * 24 : (eH + 1 - sH) * 24;
+      durationHours = eH >= sH ? eH - sH : eH + 24 - sH;
     } else {
       const fallbackStr = String(getVal(t, ["duration", "quy ra số giờ làm", "total", "actual hours", "working hours", "giờ làm", "số giờ", "hours", "tk_duration", "total hours", "tổng giờ", "time"]) || "0").trim();
       if (fallbackStr.includes(":")) {
@@ -328,7 +328,10 @@ export function calculateTimesheet(params: any) {
       fullName: effName,
       maAE: aeCode,
       date: dateStr,
-      taskType: effectiveType,
+      // MKT LOCAL NORTH_TIMESHEET must use the source file's TYPE column.
+      // Never replace a blank/missing TYPE with the internal supportMkt bucket.
+      sourceType: rawType,
+      taskType: isMktNorthBank ? rawType : effectiveType,
       classCode: effectiveClass,
       from: fromStr,
       to: toStr,
@@ -486,22 +489,57 @@ export function calculateTimesheet(params: any) {
     groups[key].push(d);
   });
 
+  let overlapGroupSequence = 0;
   Object.values(groups).forEach(group => {
     if (group.length <= 1) return;
+    const neighbours = new Map<any, any[]>();
+    group.forEach((row) => neighbours.set(row, []));
+
     for (let i = 0; i < group.length; i++) {
-      const r1 = group[i];
-      let overlapDetails = [];
-      for (let j = 0; j < group.length; j++) {
-        if (i === j) continue;
-        const r2 = group[j];
-        if (checkShiftOverlap(r1, r2)) {
-          overlapDetails.push(`Ca ${r2.gio_vao}-${r2.gio_ra} (Lớp ${r2.class || "N/A"})`);
-        }
-      }
-      if (overlapDetails.length > 0) {
-        r1.overlap_check = `Trùng lịch: ${overlapDetails.join(", ")}`;
+      for (let j = i + 1; j < group.length; j++) {
+        const left = group[i];
+        const right = group[j];
+        if (!checkShiftOverlap(left, right)) continue;
+        neighbours.get(left)!.push(right);
+        neighbours.get(right)!.push(left);
       }
     }
+
+    const visited = new Set<any>();
+    group.forEach((startRow) => {
+      if (visited.has(startRow) || neighbours.get(startRow)!.length === 0) return;
+
+      const component: any[] = [];
+      const stack = [startRow];
+      visited.add(startRow);
+      while (stack.length > 0) {
+        const row = stack.pop()!;
+        component.push(row);
+        neighbours.get(row)!.forEach((nextRow) => {
+          if (visited.has(nextRow)) return;
+          visited.add(nextRow);
+          stack.push(nextRow);
+        });
+      }
+
+      component.sort((left, right) => {
+        const timeDifference = timeToMinutes(left.gio_vao) - timeToMinutes(right.gio_vao);
+        return timeDifference || String(left.class || "").localeCompare(String(right.class || ""), "vi");
+      });
+      const groupCode = `TL-${String(++overlapGroupSequence).padStart(3, "0")}`;
+
+      component.forEach((row, index) => {
+        const overlappingRows = neighbours.get(row)!;
+        const overlapDetails = overlappingRows.map(
+          (other) => `Ca ${other.gio_vao}-${other.gio_ra} (Lớp ${other.class || "N/A"})`,
+        );
+        row.overlap_check = `Trùng lịch: ${overlapDetails.join(", ")}`;
+        row.overlap_group = groupCode;
+        row.overlap_position = index + 1;
+        row.overlap_total = component.length;
+        row.overlap_with_ids = overlappingRows.map((other) => other.id);
+      });
+    });
   });
 
   // -------------------------------------------------------------------------

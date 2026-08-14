@@ -49,7 +49,7 @@ export function CenterTable({
       );
       if (!centerKey) return;
       const current = valuesByCenter.get(centerKey) || {};
-      const hours = Number(row.duration ?? row.workingHours) || 0;
+      const hours = Number(row.workingHours ?? row.duration) || 0;
       current[type] = (current[type] || 0) + hours * 20_000;
       valuesByCenter.set(centerKey, current);
     });

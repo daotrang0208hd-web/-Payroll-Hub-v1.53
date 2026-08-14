@@ -335,10 +335,47 @@ export function getVal(
 
   return firstDefinedValue;
 }
-export function parseTimeStrToHours(timeStr: string): number {
-  if (!timeStr) return 0;
-  const [h, m] = String(timeStr).split(':').map(Number);
-  return (h || 0) + (m || 0) / 60;
+export function parseTimeStrToHours(timeValue: unknown): number {
+  if (timeValue === null || timeValue === undefined || timeValue === "") return 0;
+
+  if (timeValue instanceof Date) {
+    if (Number.isNaN(timeValue.getTime())) return 0;
+    return (
+      timeValue.getHours() +
+      timeValue.getMinutes() / 60 +
+      timeValue.getSeconds() / 3600
+    );
+  }
+
+  if (typeof timeValue === "number" && Number.isFinite(timeValue)) {
+    // XLSX can expose a clock value either as an Excel day fraction (0.375)
+    // or as an hour value (9). Normalise both to hours-of-day.
+    const dayFraction = Math.abs(timeValue) < 1
+      ? timeValue
+      : timeValue >= 24
+        ? timeValue - Math.floor(timeValue)
+        : null;
+    return dayFraction === null ? timeValue : dayFraction * 24;
+  }
+
+  const source = String(timeValue).trim();
+  if (!source) return 0;
+
+  const numeric = Number(source.replace(",", "."));
+  if (Number.isFinite(numeric) && !source.includes(":")) {
+    return parseTimeStrToHours(numeric);
+  }
+
+  const match = source.match(/^(\d{1,2}):([0-5]?\d)(?::([0-5]?\d))?\s*(AM|PM)?$/i);
+  if (!match) return 0;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3] || 0);
+  const meridiem = match[4]?.toUpperCase();
+  if (meridiem === "PM" && hours < 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+  return hours + minutes / 60 + seconds / 3600;
 }
 export async function getExcelFileBuffer(
   file: File,

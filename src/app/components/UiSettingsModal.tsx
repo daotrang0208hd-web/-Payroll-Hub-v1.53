@@ -12,6 +12,15 @@ import {
   Maximize2,
   PanelTopOpen,
   Check,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Ruler,
 } from "lucide-react";
 import { toast } from "sonner";
 import localforage from "localforage";
@@ -70,6 +79,12 @@ interface SelectedDivInfo {
   padding: string;
   margin: string;
   fontSize: string;
+  fontFamily: string;
+  fontWeight: string;
+  fontStyle: string;
+  textDecoration: string;
+  textAlign: string;
+  lineHeight: string;
   width: string;
   height: string;
 }
@@ -103,6 +118,12 @@ export function UiSettingsModal({
   const [newWidth, setNewWidth] = useState("");
   const [newHeight, setNewHeight] = useState("");
   const [newFontSize, setNewFontSize] = useState("");
+  const [newFontFamily, setNewFontFamily] = useState("");
+  const [newFontWeight, setNewFontWeight] = useState("");
+  const [newFontStyle, setNewFontStyle] = useState("");
+  const [newTextDecoration, setNewTextDecoration] = useState("");
+  const [newTextAlign, setNewTextAlign] = useState("");
+  const [newLineHeight, setNewLineHeight] = useState("");
 
   // Split padding states
   const [padTop, setPadTop] = useState("");
@@ -116,6 +137,7 @@ export function UiSettingsModal({
   const [marBottom, setMarBottom] = useState("");
   const [marLeft, setMarLeft] = useState("");
   const selectedElementRef = useRef<HTMLElement | null>(null);
+  const editorBaselineRef = useRef<Record<string, string>>({});
   const [selectedDivInfo, setSelectedDivInfo] = useState<SelectedDivInfo | null>(null);
   const [selectedDivRect, setSelectedDivRect] = useState<SelectedDivRect | null>(null);
   const [isCompactInspector, setIsCompactInspector] = useState(false);
@@ -177,13 +199,22 @@ export function UiSettingsModal({
     setNewWidth("");
     setNewHeight("");
     setNewFontSize("");
+    setNewFontFamily("");
+    setNewFontWeight("");
+    setNewFontStyle("");
+    setNewTextDecoration("");
+    setNewTextAlign("");
+    setNewLineHeight("");
+    editorBaselineRef.current = {};
   }, [updatePaddingStates, updateMarginStates]);
 
   const captureSelectedElement = useCallback((element: HTMLElement, selector: string) => {
     const computed = window.getComputedStyle(element);
     const rect = element.getBoundingClientRect();
+    selectedElementRef.current?.classList.remove("ui-inspector-selected");
     selectedElementRef.current = element;
-    setSelectedDivInfo({
+    element.classList.add("ui-inspector-selected");
+    const info: SelectedDivInfo = {
       tag: element.tagName.toLowerCase(),
       selector,
       background: computed.backgroundColor,
@@ -193,14 +224,72 @@ export function UiSettingsModal({
       padding: computed.padding,
       margin: computed.margin,
       fontSize: computed.fontSize,
+      fontFamily: computed.fontFamily,
+      fontWeight: computed.fontWeight,
+      fontStyle: computed.fontStyle,
+      textDecoration: computed.textDecorationLine,
+      textAlign: computed.textAlign,
+      lineHeight: computed.lineHeight,
       width: `${Math.round(rect.width)}px`,
       height: `${Math.round(rect.height)}px`,
-    });
+    };
+    setSelectedDivInfo(info);
     setSelectedDivRect({
       top: rect.top,
       left: rect.left,
       width: rect.width,
     });
+    return info;
+  }, []);
+
+  const loadComputedFields = useCallback((info: SelectedDivInfo) => {
+    const padding = parseShorthand(info.padding);
+    const margin = parseShorthand(info.margin);
+    const values = {
+      radius: info.radius,
+      bg: info.background,
+      color: info.color,
+      border: info.border,
+      padTop: cleanUnit(padding.top),
+      padRight: cleanUnit(padding.right),
+      padBottom: cleanUnit(padding.bottom),
+      padLeft: cleanUnit(padding.left),
+      marTop: cleanUnit(margin.top),
+      marRight: cleanUnit(margin.right),
+      marBottom: cleanUnit(margin.bottom),
+      marLeft: cleanUnit(margin.left),
+      width: info.width,
+      height: info.height,
+      fontSize: info.fontSize,
+      fontFamily: info.fontFamily,
+      fontWeight: info.fontWeight,
+      fontStyle: info.fontStyle,
+      textDecoration: info.textDecoration,
+      textAlign: info.textAlign,
+      lineHeight: info.lineHeight,
+    };
+    setNewRadius(info.radius);
+    setNewBg(info.background);
+    setNewColor(info.color);
+    setNewBorder(info.border);
+    setPadTop(values.padTop);
+    setPadRight(values.padRight);
+    setPadBottom(values.padBottom);
+    setPadLeft(values.padLeft);
+    setMarTop(values.marTop);
+    setMarRight(values.marRight);
+    setMarBottom(values.marBottom);
+    setMarLeft(values.marLeft);
+    setNewWidth(info.width);
+    setNewHeight(info.height);
+    setNewFontSize(info.fontSize);
+    setNewFontFamily(info.fontFamily);
+    setNewFontWeight(info.fontWeight);
+    setNewFontStyle(info.fontStyle);
+    setNewTextDecoration(info.textDecoration);
+    setNewTextAlign(info.textAlign);
+    setNewLineHeight(info.lineHeight);
+    editorBaselineRef.current = values;
   }, []);
 
   const handleSelectorChange = useCallback((selector: string, targetElement?: HTMLElement) => {
@@ -208,6 +297,7 @@ export function UiSettingsModal({
     const cleanSelector = selector.trim();
     if (!cleanSelector) {
       resetCustomRuleFields();
+      selectedElementRef.current?.classList.remove("ui-inspector-selected");
       selectedElementRef.current = null;
       setSelectedDivInfo(null);
       setSelectedDivRect(null);
@@ -222,30 +312,62 @@ export function UiSettingsModal({
         resolvedElement = undefined;
       }
     }
-    if (resolvedElement) {
-      captureSelectedElement(resolvedElement, cleanSelector);
-    }
+    const computedInfo = resolvedElement
+      ? captureSelectedElement(resolvedElement, cleanSelector)
+      : null;
 
     const existingRule = settings.customRules?.find(
       (r) => r.selector === cleanSelector
     );
-    if (existingRule) {
-      setNewRadius(existingRule.radius || "");
-      setNewBg(existingRule.bg || "");
-      setNewColor(existingRule.color || "");
-      setNewBorder(existingRule.border || "");
-      updatePaddingStates(existingRule.padding || "");
-      updateMarginStates(existingRule.margin || "");
-      setNewWidth(existingRule.width || "");
-      setNewHeight(existingRule.height || "");
-      setNewFontSize(existingRule.fontSize || "");
+    if (computedInfo) {
+      // Show the actual computed result (including an existing saved rule),
+      // while retaining the original rule until a field is really edited.
+      loadComputedFields(computedInfo);
+    } else if (existingRule) {
+      const existingPadding = parseShorthand(existingRule.padding || "");
+      const existingMargin = parseShorthand(existingRule.margin || "");
+      setNewRadius(existingRule.radius || computedInfo?.radius || "");
+      setNewBg(existingRule.bg || computedInfo?.background || "");
+      setNewColor(existingRule.color || computedInfo?.color || "");
+      setNewBorder(existingRule.border || computedInfo?.border || "");
+      updatePaddingStates(existingRule.padding || computedInfo?.padding || "");
+      updateMarginStates(existingRule.margin || computedInfo?.margin || "");
+      setNewWidth(existingRule.width || computedInfo?.width || "");
+      setNewHeight(existingRule.height || computedInfo?.height || "");
+      setNewFontSize(existingRule.fontSize || computedInfo?.fontSize || "");
+      setNewFontFamily(existingRule.fontFamily || computedInfo?.fontFamily || "");
+      setNewFontWeight(existingRule.fontWeight || computedInfo?.fontWeight || "");
+      setNewFontStyle(existingRule.fontStyle || computedInfo?.fontStyle || "");
+      setNewTextDecoration(existingRule.textDecoration || computedInfo?.textDecoration || "");
+      setNewTextAlign(existingRule.textAlign || computedInfo?.textAlign || "");
+      setNewLineHeight(existingRule.lineHeight || computedInfo?.lineHeight || "");
+      editorBaselineRef.current = {
+        radius: existingRule.radius || "",
+        bg: existingRule.bg || "",
+        color: existingRule.color || "",
+        border: existingRule.border || "",
+        padTop: cleanUnit(existingPadding.top),
+        padRight: cleanUnit(existingPadding.right),
+        padBottom: cleanUnit(existingPadding.bottom),
+        padLeft: cleanUnit(existingPadding.left),
+        marTop: cleanUnit(existingMargin.top),
+        marRight: cleanUnit(existingMargin.right),
+        marBottom: cleanUnit(existingMargin.bottom),
+        marLeft: cleanUnit(existingMargin.left),
+        width: existingRule.width || "",
+        height: existingRule.height || "",
+        fontSize: existingRule.fontSize || "",
+        fontFamily: existingRule.fontFamily || "",
+        fontWeight: existingRule.fontWeight || "",
+        fontStyle: existingRule.fontStyle || "",
+        textDecoration: existingRule.textDecoration || "",
+        textAlign: existingRule.textAlign || "",
+        lineHeight: existingRule.lineHeight || "",
+      };
     } else {
-      // A new selection starts with no overrides. Copying computed width,
-      // height, spacing and typography into a rule would freeze the current
-      // layout even when the user only intended to change one property.
       resetCustomRuleFields();
     }
-  }, [settings.customRules, resetCustomRuleFields, updatePaddingStates, updateMarginStates, captureSelectedElement]);
+  }, [settings.customRules, resetCustomRuleFields, updatePaddingStates, updateMarginStates, captureSelectedElement, loadComputedFields]);
 
   // State and effect for element inspector mode
   const [isInspecting, setIsInspecting] = useState(false);
@@ -496,20 +618,29 @@ export function UiSettingsModal({
     const normalizedWidth = normalizeCssLength(newWidth);
     const normalizedHeight = normalizeCssLength(newHeight);
     const normalizedFontSize = normalizeCssLength(newFontSize);
+    const normalizedLineHeight = normalizeCssLength(newLineHeight);
     const padding = getCombinedPadding() || undefined;
     const margin = getCombinedMargin() || undefined;
-    const hasOverride = Boolean(
-      normalizedRadius ||
-      newBg.trim() ||
-      newColor.trim() ||
-      newBorder.trim() ||
-      padding ||
-      margin ||
-      normalizedWidth ||
-      normalizedHeight ||
-      normalizedFontSize,
-    );
-    if (!hasOverride) {
+    const baseline = editorBaselineRef.current;
+    const changed = (key: string, value: string) => (baseline[key] || "") !== value;
+    const paddingChanged =
+      changed("padTop", padTop) || changed("padRight", padRight) ||
+      changed("padBottom", padBottom) || changed("padLeft", padLeft);
+    const marginChanged =
+      changed("marTop", marTop) || changed("marRight", marRight) ||
+      changed("marBottom", marBottom) || changed("marLeft", marLeft);
+    const hasChanges =
+      changed("radius", newRadius) || changed("bg", newBg) ||
+      changed("color", newColor) || changed("border", newBorder) ||
+      paddingChanged || marginChanged || changed("width", newWidth) ||
+      changed("height", newHeight) || changed("fontSize", newFontSize) ||
+      changed("fontFamily", newFontFamily) || changed("fontWeight", newFontWeight) ||
+      changed("fontStyle", newFontStyle) || changed("textDecoration", newTextDecoration) ||
+      changed("textAlign", newTextAlign) || changed("lineHeight", newLineHeight);
+
+    const existingRules = settings.customRules || [];
+    const index = existingRules.findIndex((r) => r.selector === cleanSelector);
+    if (!hasChanges && index < 0) {
       toast.error("Hãy nhập ít nhất một thuộc tính cần thay đổi.");
       return null;
     }
@@ -525,27 +656,37 @@ export function UiSettingsModal({
       !supports("margin", margin) ||
       !supports("width", normalizedWidth) ||
       !supports("height", normalizedHeight) ||
-      !supports("font-size", normalizedFontSize)
+      !supports("font-size", normalizedFontSize) ||
+      !supports("font-family", newFontFamily.trim()) ||
+      !supports("font-weight", newFontWeight.trim()) ||
+      !supports("font-style", newFontStyle.trim()) ||
+      !supports("text-decoration-line", newTextDecoration.trim()) ||
+      !supports("text-align", newTextAlign.trim()) ||
+      !supports("line-height", normalizedLineHeight)
     ) {
       toast.error("Có giá trị CSS không hợp lệ. Vui lòng kiểm tra lại đơn vị hoặc màu.");
       return null;
     }
 
-    const existingRules = settings.customRules || [];
-    const index = existingRules.findIndex((r) => r.selector === cleanSelector);
-
     const newRule = {
+      ...(index >= 0 ? existingRules[index] : {}),
       id: index >= 0 ? existingRules[index].id : "rule-" + Date.now(),
       selector: cleanSelector,
-      radius: normalizedRadius,
-      bg: newBg.trim() || undefined,
-      color: newColor.trim() || undefined,
-      border: newBorder.trim() || undefined,
-      padding,
-      margin,
-      width: normalizedWidth,
-      height: normalizedHeight,
-      fontSize: normalizedFontSize,
+      ...(changed("radius", newRadius) ? { radius: normalizedRadius } : {}),
+      ...(changed("bg", newBg) ? { bg: newBg.trim() || undefined } : {}),
+      ...(changed("color", newColor) ? { color: newColor.trim() || undefined } : {}),
+      ...(changed("border", newBorder) ? { border: newBorder.trim() || undefined } : {}),
+      ...(paddingChanged ? { padding } : {}),
+      ...(marginChanged ? { margin } : {}),
+      ...(changed("width", newWidth) ? { width: normalizedWidth } : {}),
+      ...(changed("height", newHeight) ? { height: normalizedHeight } : {}),
+      ...(changed("fontSize", newFontSize) ? { fontSize: normalizedFontSize } : {}),
+      ...(changed("fontFamily", newFontFamily) ? { fontFamily: newFontFamily.trim() || undefined } : {}),
+      ...(changed("fontWeight", newFontWeight) ? { fontWeight: newFontWeight.trim() || undefined } : {}),
+      ...(changed("fontStyle", newFontStyle) ? { fontStyle: newFontStyle.trim() || undefined } : {}),
+      ...(changed("textDecoration", newTextDecoration) ? { textDecoration: newTextDecoration.trim() || undefined } : {}),
+      ...(changed("textAlign", newTextAlign) ? { textAlign: newTextAlign.trim() || undefined } : {}),
+      ...(changed("lineHeight", newLineHeight) ? { lineHeight: normalizedLineHeight } : {}),
     };
 
     let updatedRules;
@@ -562,6 +703,7 @@ export function UiSettingsModal({
     if (!keepSelection) {
       setNewSelector("");
       resetCustomRuleFields();
+      selectedElementRef.current?.classList.remove("ui-inspector-selected");
       selectedElementRef.current = null;
       setSelectedDivInfo(null);
       setSelectedDivRect(null);
@@ -602,6 +744,7 @@ export function UiSettingsModal({
     setIsInspecting(false);
     setIsCompactInspector(false);
     setNewSelector("");
+    selectedElementRef.current?.classList.remove("ui-inspector-selected");
     selectedElementRef.current = null;
     setSelectedDivInfo(null);
     setSelectedDivRect(null);
@@ -611,21 +754,35 @@ export function UiSettingsModal({
 
   useEffect(() => {
     if (isOpen) {
+      const baseline = editorBaselineRef.current;
+      const changed = (key: string, value: string) => (baseline[key] || "") !== value;
+      const paddingChanged =
+        changed("padTop", padTop) || changed("padRight", padRight) ||
+        changed("padBottom", padBottom) || changed("padLeft", padLeft);
+      const marginChanged =
+        changed("marTop", marTop) || changed("marRight", marRight) ||
+        changed("marBottom", marBottom) || changed("marLeft", marLeft);
       const previewRule = {
         selector: newSelector.trim(),
-        radius: newRadius,
-        bg: newBg,
-        color: newColor,
-        border: newBorder,
-        padding: getCombinedPadding(),
-        margin: getCombinedMargin(),
-        width: newWidth,
-        height: newHeight,
-        fontSize: newFontSize,
+        radius: changed("radius", newRadius) ? newRadius : undefined,
+        bg: changed("bg", newBg) ? newBg : undefined,
+        color: changed("color", newColor) ? newColor : undefined,
+        border: changed("border", newBorder) ? newBorder : undefined,
+        padding: paddingChanged ? getCombinedPadding() : undefined,
+        margin: marginChanged ? getCombinedMargin() : undefined,
+        width: changed("width", newWidth) ? newWidth : undefined,
+        height: changed("height", newHeight) ? newHeight : undefined,
+        fontSize: changed("fontSize", newFontSize) ? newFontSize : undefined,
+        fontFamily: changed("fontFamily", newFontFamily) ? newFontFamily : undefined,
+        fontWeight: changed("fontWeight", newFontWeight) ? newFontWeight : undefined,
+        fontStyle: changed("fontStyle", newFontStyle) ? newFontStyle : undefined,
+        textDecoration: changed("textDecoration", newTextDecoration) ? newTextDecoration : undefined,
+        textAlign: changed("textAlign", newTextAlign) ? newTextAlign : undefined,
+        lineHeight: changed("lineHeight", newLineHeight) ? newLineHeight : undefined,
       };
       applyUiSettings(settings, previewRule);
     }
-  }, [settings, isOpen, newSelector, newRadius, newBg, newColor, newBorder, getCombinedPadding, getCombinedMargin, newWidth, newHeight, newFontSize]);
+  }, [settings, isOpen, newSelector, newRadius, newBg, newColor, newBorder, getCombinedPadding, getCombinedMargin, padTop, padRight, padBottom, padLeft, marTop, marRight, marBottom, marLeft, newWidth, newHeight, newFontSize, newFontFamily, newFontWeight, newFontStyle, newTextDecoration, newTextAlign, newLineHeight]);
 
   const saveSettings = async () => {
     try {
@@ -718,6 +875,19 @@ export function UiSettingsModal({
     onClose();
   };
 
+  const toggleTextDecoration = (decoration: "underline" | "line-through") => {
+    setNewTextDecoration((current) => {
+      const values = new Set(
+        String(current || "")
+          .split(/\s+/)
+          .filter((value) => value && value !== "none"),
+      );
+      if (values.has(decoration)) values.delete(decoration);
+      else values.add(decoration);
+      return values.size > 0 ? Array.from(values).join(" ") : "none";
+    });
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -753,17 +923,21 @@ export function UiSettingsModal({
               </span>
               <span className="min-w-0 flex-1 truncate text-slate-200">{selectedDivInfo.selector}</span>
             </div>
-            <div className="flex h-7 items-center gap-x-3 overflow-hidden px-2 font-mono text-[9px] text-slate-300">
+            <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1 font-mono text-[9px] text-slate-300">
               <span>BG <b className="text-white">{newBg || selectedDivInfo.background}</b></span>
               <span>COLOR <b className="text-white">{newColor || selectedDivInfo.color}</b></span>
               <span>BORDER <b className="text-white">{newBorder || selectedDivInfo.border}</b></span>
               <span>RADIUS <b className="text-white">{newRadius || selectedDivInfo.radius}</b></span>
+              <span>FONT <b className="text-white">{newFontSize || selectedDivInfo.fontSize} / {newLineHeight || selectedDivInfo.lineHeight}</b></span>
+              <span>SIZE <b className="text-white">{newWidth || selectedDivInfo.width} × {newHeight || selectedDivInfo.height}</b></span>
+              <span>PADDING <b className="text-white">{getCombinedPadding() || selectedDivInfo.padding}</b></span>
+              <span>MARGIN <b className="text-white">{getCombinedMargin() || selectedDivInfo.margin}</b></span>
             </div>
           </div>
 
           <div
             data-ui-settings-shell="true"
-            className="fixed bottom-5 left-1/2 z-[100001] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-stretch overflow-x-auto border border-white/15 bg-[#1f1f21] text-white shadow-2xl"
+            className="fixed bottom-4 left-1/2 z-[100001] flex max-w-[calc(100vw-24px)] -translate-x-1/2 items-stretch overflow-x-auto rounded-2xl border border-white/15 bg-[#1f1f21] text-white shadow-2xl"
           >
             <button
               type="button"
@@ -776,12 +950,113 @@ export function UiSettingsModal({
             >
               <Target className="h-4 w-4" />
             </button>
+            <label className="flex min-w-44 flex-col justify-center border-r border-white/10 px-3 py-2">
+              <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">Font family</span>
+              <input
+                value={newFontFamily}
+                onChange={(event) => setNewFontFamily(event.target.value)}
+                aria-label="Font family của DIV"
+                className="w-40 border-0 bg-transparent p-0 text-[11px] text-white outline-none"
+              />
+            </label>
+
+            <div className="flex items-center border-r border-white/10 px-1">
+              {[
+                { label: "Bold", icon: Bold, active: Number(newFontWeight) >= 600, onClick: () => setNewFontWeight(Number(newFontWeight) >= 600 ? "400" : "700") },
+                { label: "Italic", icon: Italic, active: newFontStyle === "italic", onClick: () => setNewFontStyle(newFontStyle === "italic" ? "normal" : "italic") },
+                { label: "Underline", icon: Underline, active: newTextDecoration.includes("underline"), onClick: () => toggleTextDecoration("underline") },
+                { label: "Gạch ngang", icon: Strikethrough, active: newTextDecoration.includes("line-through"), onClick: () => toggleTextDecoration("line-through") },
+              ].map(({ label, icon: Icon, active, onClick }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={onClick}
+                  title={label}
+                  className={`m-1 flex h-9 w-9 items-center justify-center rounded-lg ${active ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center border-r border-white/10 px-1">
+              {[
+                { value: "left", label: "Căn trái", icon: AlignLeft },
+                { value: "center", label: "Căn giữa", icon: AlignCenter },
+                { value: "right", label: "Căn phải", icon: AlignRight },
+                { value: "justify", label: "Căn đều", icon: AlignJustify },
+              ].map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setNewTextAlign(value)}
+                  title={label}
+                  className={`m-1 flex h-9 w-9 items-center justify-center rounded-lg ${newTextAlign === value ? "bg-white text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              ))}
+            </div>
+
             {[
-              { label: "Nền", icon: PaintBucket, value: newBg, fallback: selectedDivInfo.background, setter: setNewBg },
-              { label: "Chữ", icon: Type, value: newColor, fallback: selectedDivInfo.color, setter: setNewColor },
-              { label: "Viền", icon: SquareDashed, value: newBorder, fallback: selectedDivInfo.border, setter: setNewBorder },
-              { label: "Bo góc", icon: Maximize2, value: newRadius, fallback: selectedDivInfo.radius, setter: setNewRadius },
-            ].map(({ label, icon: Icon, value, fallback, setter }) => (
+              { label: "Font", value: newFontSize, setter: setNewFontSize, width: "w-16" },
+              { label: "Line", value: newLineHeight, setter: setNewLineHeight, width: "w-16" },
+              { label: "Width", value: newWidth, setter: setNewWidth, width: "w-20" },
+              { label: "Height", value: newHeight, setter: setNewHeight, width: "w-20" },
+            ].map(({ label, value, setter, width }) => (
+              <label key={label} className="flex min-w-24 flex-col justify-center border-r border-white/10 px-2 py-2">
+                <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{label}</span>
+                <input
+                  value={value}
+                  onChange={(event) => setter(event.target.value)}
+                  aria-label={`${label} của DIV`}
+                  className={`${width} border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none`}
+                />
+              </label>
+            ))}
+
+            <div className="flex min-w-[248px] flex-col justify-center border-r border-white/10 px-2 py-1.5">
+              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-slate-500"><Ruler className="h-3 w-3" /> Padding T/R/B/L</span>
+              <div className="mt-1 grid grid-cols-4 gap-1">
+                {[
+                  [padTop, setPadTop, "T"], [padRight, setPadRight, "R"], [padBottom, setPadBottom, "B"], [padLeft, setPadLeft, "L"],
+                ].map(([value, setter, label]) => (
+                  <label key={String(label)} className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1">
+                    <span className="text-[8px] text-slate-500">{String(label)}</span>
+                    <input
+                      value={value as string}
+                      onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)}
+                      className="w-9 bg-transparent py-1 text-right font-mono text-[10px] text-white outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex min-w-[248px] flex-col justify-center border-r border-white/10 px-2 py-1.5">
+              <span className="flex items-center gap-1 text-[8px] font-black uppercase tracking-widest text-slate-500"><Maximize2 className="h-3 w-3" /> Margin T/R/B/L</span>
+              <div className="mt-1 grid grid-cols-4 gap-1">
+                {[
+                  [marTop, setMarTop, "T"], [marRight, setMarRight, "R"], [marBottom, setMarBottom, "B"], [marLeft, setMarLeft, "L"],
+                ].map(([value, setter, label]) => (
+                  <label key={String(label)} className="flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1">
+                    <span className="text-[8px] text-slate-500">{String(label)}</span>
+                    <input
+                      value={value as string}
+                      onChange={(event) => (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value)}
+                      className="w-9 bg-transparent py-1 text-right font-mono text-[10px] text-white outline-none"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {[
+              { label: "Nền", icon: PaintBucket, value: newBg, setter: setNewBg },
+              { label: "Chữ", icon: Type, value: newColor, setter: setNewColor },
+              { label: "Viền", icon: SquareDashed, value: newBorder, setter: setNewBorder },
+              { label: "Bo góc", icon: Maximize2, value: newRadius, setter: setNewRadius },
+            ].map(({ label, icon: Icon, value, setter }) => (
               <label key={label} className="flex min-w-32 items-center gap-2 border-r border-white/10 px-3 py-2">
                 <Icon className="h-4 w-4 shrink-0 text-slate-300" />
                 <span className="flex min-w-0 flex-col">
@@ -789,9 +1064,8 @@ export function UiSettingsModal({
                   <input
                     value={value}
                     onChange={(event) => setter(event.target.value)}
-                    placeholder={fallback}
                     aria-label={`Chỉnh ${label.toLowerCase()} của DIV`}
-                    className="w-24 border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none placeholder:text-slate-400"
+                    className="w-24 border-0 bg-transparent p-0 font-mono text-[10px] text-white outline-none"
                   />
                 </span>
               </label>
@@ -1173,6 +1447,70 @@ export function UiSettingsModal({
                         </div>
                       </div>
 
+                      <div className="mt-1 grid grid-cols-2 gap-2 border-t border-primary/5 pt-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[0.6rem] font-bold text-primary/60">Font family:</span>
+                          <input
+                            type="text"
+                            value={newFontFamily}
+                            onChange={(e) => setNewFontFamily(e.target.value)}
+                            className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[0.6rem] font-bold text-primary/60">Line height:</span>
+                          <input
+                            type="text"
+                            value={newLineHeight}
+                            onChange={(e) => setNewLineHeight(e.target.value)}
+                            className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[0.6rem] font-bold text-primary/60">Font weight / style:</span>
+                          <div className="grid grid-cols-2 gap-1">
+                            <input
+                              type="text"
+                              value={newFontWeight}
+                              onChange={(e) => setNewFontWeight(e.target.value)}
+                              className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                            />
+                            <select
+                              value={newFontStyle}
+                              onChange={(e) => setNewFontStyle(e.target.value)}
+                              className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                            >
+                              <option value="normal">Normal</option>
+                              <option value="italic">Italic</option>
+                              <option value="oblique">Oblique</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[0.6rem] font-bold text-primary/60">Căn chữ / trang trí:</span>
+                          <div className="grid grid-cols-2 gap-1">
+                            <select
+                              value={newTextAlign}
+                              onChange={(e) => setNewTextAlign(e.target.value)}
+                              className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                            >
+                              <option value="left">Left</option>
+                              <option value="center">Center</option>
+                              <option value="right">Right</option>
+                              <option value="justify">Justify</option>
+                              <option value="start">Start</option>
+                              <option value="end">End</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={newTextDecoration}
+                              onChange={(e) => setNewTextDecoration(e.target.value)}
+                              className="border border-primary/20 rounded p-1 bg-white text-primary text-xs outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => addCustomRule()}
@@ -1196,6 +1534,12 @@ export function UiSettingsModal({
                                   rule.bg && `bg: ${rule.bg}`,
                                   rule.color && `c: ${rule.color}`,
                                   rule.fontSize && `fs: ${rule.fontSize}`,
+                                  rule.fontFamily && `font: ${rule.fontFamily}`,
+                                  rule.fontWeight && `weight: ${rule.fontWeight}`,
+                                  rule.fontStyle && `style: ${rule.fontStyle}`,
+                                  rule.textDecoration && `decoration: ${rule.textDecoration}`,
+                                  rule.textAlign && `align: ${rule.textAlign}`,
+                                  rule.lineHeight && `lh: ${rule.lineHeight}`,
                                   rule.border && `b: ${rule.border}`,
                                   rule.padding && `p: ${rule.padding}`,
                                   rule.margin && `m: ${rule.margin}`,

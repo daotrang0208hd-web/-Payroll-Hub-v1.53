@@ -315,6 +315,18 @@ export function resolveMktAndCenterL07(
 export function getL07FromFileName(fileName: string): string {
   if (!fileName) return "";
   const name = fileName.toUpperCase();
+  const fileTokens = new Set(tokenizeFileName(fileName));
+
+  // Explicit Timesheet filename rules supplied by payroll. These aliases are
+  // intentionally limited to complete filename tokens so short codes such as
+  // HL cannot accidentally match an unrelated word.
+  if (fileTokens.has("NSL")) return "BN0001.LTT";
+  if (fileTokens.has("TUS")) return "BN0002.TSN";
+  if (fileTokens.has("HL")) return "QN0001.HLG";
+  if (fileTokens.has("ECP")) return "HY0001.ECP";
+  if (name.includes("NORTH.MKT ROSTER") || name.includes("NORTH MKT ROSTER")) {
+    return "MKT LOCAL NORTH";
+  }
   if (name.includes("MKT")) return "MKT LOCAL NORTH";
   return getCenterInfoFromFileName(fileName)?.l07 || "";
 }

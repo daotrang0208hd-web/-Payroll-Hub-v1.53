@@ -28,6 +28,7 @@ import {
 import {
   isFileNameStoredAsL07,
   resolveTimesheetCenterFromFileName,
+  shouldSkipTimesheetSource,
 } from "../../lib/utils/timesheet-input-resolver";
 import { 
   generateUUID, 
@@ -117,6 +118,7 @@ const parseExcelInWorker = async (
 };
 
 const DEFAULT_FOLDER_URL = "https://drive.google.com/drive/folders/1gU6Hcrv94Bx_yv1qNTqH0vQNy7ElKzXJ";
+const MKT_LOCAL_NORTH_URL = "https://docs.google.com/spreadsheets/d/1z7DJYJAyWqBw8IXNYbEIHhGXBMumsRA4rUHT1prBsFo/edit?gid=1119129159#gid=1119129159";
 
 interface TimesheetSummaryPageProps {
   onBack?: () => void;
@@ -146,6 +148,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
   const handleUrlInput = async (id: string, url: string) => {
     if (!url.trim()) return;
+    if (shouldSkipTimesheetSource(url)) {
+      toast.info("Hệ thống tự động bỏ qua link MKT HP.");
+      return;
+    }
     const isFolder = url.includes("folders/") || url.includes("drive/folders/") || url.includes("?id=");
 
     setIsFetchingGgSheet(true);
@@ -177,7 +183,11 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
 
         const driveFiles = (data.files || []).filter((f: Record<string, unknown>) => {
           const name = String(f.name || "").toLowerCase();
-          return !name.includes("copy");
+          return !name.includes("copy") && !shouldSkipTimesheetSource(
+            f.name,
+            f.webViewLink,
+            f.url,
+          );
         });
 
         if (driveFiles.length === 0 && data.files.length > 0) {
@@ -356,6 +366,23 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     { id: "1", l07: "", aeCode: "", bus: "", url: "", status: "pending" },
   ], [appData.Timesheet_InputList]);
 
+  // The North.MKT Roster source is fixed by payroll. Repair older persisted
+  // rows as well, so users never need to paste the link again.
+  useEffect(() => {
+    const needsRepair = inputRows.some(
+      (row) => String(row.l07 || "").trim().toUpperCase() === "MKT LOCAL NORTH" && row.url !== MKT_LOCAL_NORTH_URL,
+    );
+    if (!needsRepair) return;
+    updateAppData((prev) => ({
+      ...prev,
+      Timesheet_InputList: (prev.Timesheet_InputList || []).map((row) =>
+        String(row.l07 || "").trim().toUpperCase() === "MKT LOCAL NORTH"
+          ? { ...row, url: MKT_LOCAL_NORTH_URL }
+          : row,
+      ),
+    }), false);
+  }, [inputRows, updateAppData]);
+
   // Repair rows created by the previous folder-import bug. Their L07 was the
   // filename itself; move the imported file/data back onto the already
   // configured center row and remove only that generated duplicate.
@@ -436,7 +463,7 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
               (field === "l07" && val === "MKT LOCAL NORTH") ||
               (field === "aeCode" && (val === "MKT LOCAL NORTH" || val === "NTW"))
             ) {
-              updated.url = "https://docs.google.com/spreadsheets/d/1z7DJYJAyWqBw8IXNYbEIHhGXBMumsRA4rUHT1prBsFo/edit?gid=1119129159#gid=1119129159";
+              updated.url = MKT_LOCAL_NORTH_URL;
             }
             return updated;
           }
@@ -616,7 +643,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
         throw new Error("Không tìm thấy file nào trong thư mục.");
       }
 
-      const driveFiles = (data.files || []).filter((f: { name?: string }) => !String(f.name).toLowerCase().includes("copy"));
+      const driveFiles = (data.files || []).filter((f: { name?: string; webViewLink?: string; url?: string }) =>
+        !String(f.name).toLowerCase().includes("copy") &&
+        !shouldSkipTimesheetSource(f.name, f.webViewLink, f.url),
+      );
       
       const file = driveFiles.find((f: { name?: string }) => {
         const fileL07 = getL07FromFileName(f.name || "");
@@ -766,7 +796,9 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
     const toProcess: { id: string; file: File }[] = [];
     let unmatchedCount = 0;
 
-    const filteredFiles = files.filter(f => !f.name.toLowerCase().includes("copy"));
+    const filteredFiles = files.filter(
+      (file) => !file.name.toLowerCase().includes("copy") && !shouldSkipTimesheetSource(file.name),
+    );
     if (filteredFiles.length === 0 && files.length > 0) {
       toast.info("Tất cả các file đã chọn đều là file copy nên hệ thống tự động bỏ qua.");
       return;
@@ -943,6 +975,10 @@ export default function TimesheetSummaryPage({ onBack }: TimesheetSummaryPagePro
   ) => {
     if (file.name.toLowerCase().includes("copy")) {
       toast?.info(`Hệ thống tự động bỏ qua file có tên 'copy': ${file.name}`);
+      return;
+    }
+    if (shouldSkipTimesheetSource(file.name, sourceMetadata?.url)) {
+      toast?.info(`Hệ thống tự động bỏ qua nguồn MKT HP: ${file.name}`);
       return;
     }
 
