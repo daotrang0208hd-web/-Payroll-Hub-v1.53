@@ -173,7 +173,7 @@ const SUMMARY_COLUMNS: Column[] = [
     type: "text",
     width: 188,
     align: "left",
-    cellClassName: "font-semibold text-primary",
+    cellClassName: "font-semibold text-primary whitespace-pre-wrap leading-5",
     readOnly: true,
     showGrandTotal: false,
     footerClassName: "!text-transparent",

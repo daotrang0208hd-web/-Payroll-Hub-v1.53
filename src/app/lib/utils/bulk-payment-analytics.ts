@@ -512,7 +512,9 @@ export function buildBulkPaymentAnalytics({
         "Thanh toán HOLD tại kỳ": bucket.addInPeriod,
         "Tháng thanh toán tại kỳ":
           bucket.addInPeriod > 0 ? reportLabel : "",
-        "Các tháng đã thanh toán": paymentMonths.join(", "),
+        // Preserve every payment period as a distinct line. This keeps the
+        // history readable in the table and in exported spreadsheet cells.
+        "Các tháng đã thanh toán": paymentMonths.join("\n"),
         "CANCEL tại kỳ": bucket.cancelInPeriod,
         "BONUS tại kỳ": bucket.bonusInPeriod,
         "Số dư HOLD còn lại": remainingBalance,

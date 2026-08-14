@@ -1624,49 +1624,22 @@ export function HoldAddDashboard() {
     ]);
 
     allMonths.forEach((m) => {
-      const isSaved = !!savedPeriods[m];
+      const isSaved = !!getSavedDataForPeriod(savedPeriods, m);
       const live = resultMap.get(m) || [];
-      const snapshotVersion = savedRowsMeta[m]?.transactionVersion || 0;
-      const requiredTransactionVersion = transactionVersions[m] || 0;
+      const snapshot = getSavedDataForPeriod(savedRowsMap, m);
+      const snapshotMeta = getSavedDataForPeriod(savedRowsMeta, m);
+      const snapshotVersion = snapshotMeta?.transactionVersion || 0;
+      const requiredTransactionVersion =
+        getSavedDataForPeriod(transactionVersions, m) || 0;
       const snapshotIsCurrent =
         snapshotVersion >= requiredTransactionVersion;
 
-      if (isSaved && savedRowsMap[m] && snapshotIsCurrent) {
-        const snap = savedRowsMap[m];
-
-        // Return exactly the state of Hold, Add, Cancel from the snapshot
-        const snapHoldAdd = snap.filter(
-          (r: any) =>
-            String(r.id).includes("_hold") ||
-            String(r.id).includes("_add") ||
-            String(r.id).includes("_cancel") ||
-            r.customMonthDisplay,
-        );
-        const snapIds = new Set(snapHoldAdd.map((r: any) => r.id));
-        const liveOpeningHold = live.filter(
-          (r) => r._isOpeningHold && !snapIds.has(r.id),
-        );
-
-        // Keep live data for standard rows (Lương Ta) so it updates if they upload new main files
-        let liveStandard = live.filter(
-          (r) =>
-            !String(r.id).includes("_hold") &&
-            !String(r.id).includes("_add") &&
-            !String(r.id).includes("_cancel") &&
-            !r.customMonthDisplay,
-        );
-
-        if (liveStandard.length === 0) {
-          liveStandard = snap.filter(
-            (r: any) =>
-              !String(r.id).includes("_hold") &&
-              !String(r.id).includes("_add") &&
-              !String(r.id).includes("_cancel") &&
-              !r.customMonthDisplay,
-          );
-        }
-
-        finalRows.push(...snapHoldAdd, ...liveOpeningHold, ...liveStandard);
+      if (isSaved && Array.isArray(snapshot) && snapshotIsCurrent) {
+        // A saved Trial Balance is a complete monthly snapshot. Restore every
+        // standard and adjustment row exactly as saved so changing months does
+        // not discard ordinary transactions. A newer Transaction save bumps
+        // the period version, making this snapshot stale and selecting `live`.
+        finalRows.push(...snapshot.map((row: BuRow) => ({ ...row })));
       } else {
         finalRows.push(...live);
       }
@@ -1719,6 +1692,7 @@ export function HoldAddDashboard() {
     currentPeriodNum,
     getMonthNum,
     extractMonth,
+    getSavedDataForPeriod,
     isPeriodSaved,
     currentPeriodMonthNum,
     currentPeriodYearNum,
