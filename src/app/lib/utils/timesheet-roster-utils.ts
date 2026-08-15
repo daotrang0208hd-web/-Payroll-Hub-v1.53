@@ -179,13 +179,48 @@ export function createStableTimesheetRowId(
 }
 
 export function dedupeTimesheetRosterRows<T extends RosterRow>(rows: T[]): T[] {
-  const lastIndexByKey = new Map<string, number>();
-  rows.forEach((row, index) => {
-    lastIndexByKey.set(getTimesheetRosterBusinessKey(row), index);
-  });
-  return rows.filter(
-    (row, index) => lastIndexByKey.get(getTimesheetRosterBusinessKey(row)) === index,
-  );
+  const seen = new Set<string>();
+  const uniqueReversed: T[] = [];
+
+  // Walk backwards so the latest synchronized copy wins, while calculating
+  // the expensive business key only once per row.
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    const key = getTimesheetRosterBusinessKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    uniqueReversed.push(row);
+  }
+
+  uniqueReversed.reverse();
+  return uniqueReversed;
+}
+
+export async function dedupeTimesheetRosterRowsInChunks<T extends RosterRow>(
+  rows: T[],
+  chunkSize = 750,
+): Promise<T[]> {
+  const seen = new Set<string>();
+  const uniqueReversed: T[] = [];
+  let processedInChunk = 0;
+
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    const key = getTimesheetRosterBusinessKey(row);
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueReversed.push(row);
+    }
+
+    processedInChunk += 1;
+    if (processedInChunk >= chunkSize) {
+      processedInChunk = 0;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+    }
+  }
+
+  uniqueReversed.reverse();
+  return uniqueReversed;
 }
 
 export function replaceTimesheetRosterRows<T extends RosterRow>(

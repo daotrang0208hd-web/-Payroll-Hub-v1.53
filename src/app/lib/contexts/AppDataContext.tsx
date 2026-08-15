@@ -16,7 +16,7 @@ import { INITIAL_APP_DATA } from "../../constants/initial-data";
 import { parseMoneyToNumber, removeVietnameseTones, formatIdNumber } from "../utils/data-utils";
 import { resolveL07BuFromAeCode } from "../utils/center-utils";
 import { fillMissingHoldBankAccounts } from "../utils/bank-account-resolver";
-import { dedupeTimesheetRosterRows } from "../utils/timesheet-roster-utils";
+import { dedupeTimesheetRosterRowsInChunks } from "../utils/timesheet-roster-utils";
 
 // Configure localforage
 localforage.config({
@@ -80,6 +80,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStorageHydrating, setIsStorageHydrating] = useState(true);
   const [activePathname, setActivePathname] = useState(() =>
     typeof window === "undefined" ? "/" : window.location.pathname,
   );
@@ -107,6 +108,12 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const loadData = async () => {
       try {
+        // The shell must remain interactive even when IndexedDB contains a very
+        // large Timesheet snapshot. Release the global blocking loader first;
+        // storage hydration continues safely in the background.
+        setIsLoading(false);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
         const hydratedSplitFields = new Set<keyof AppData>();
         const savedMetadata =
           await localforage.getItem<Partial<AppData>>(STORAGE_META_KEY);
@@ -250,7 +257,9 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
           delete legacySaved.Q_RosterEditHistory;
 
           if (Array.isArray(saved.Timesheet_Roster)) {
-            const uniqueRoster = dedupeTimesheetRosterRows(saved.Timesheet_Roster);
+            const uniqueRoster = await dedupeTimesheetRosterRowsInChunks(
+              saved.Timesheet_Roster,
+            );
             if (uniqueRoster.length !== saved.Timesheet_Roster.length) {
               saved = { ...saved, Timesheet_Roster: uniqueRoster };
               await localforage.setItem(
@@ -415,6 +424,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         console.error("Failed to load app data from storage", e);
         toast.error("Không thể tải dữ liệu đã lưu.");
       } finally {
+        setIsStorageHydrating(false);
         setIsLoading(false);
       }
     };
@@ -423,7 +433,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   // ── Debounced sync to storage (1.5s) ──
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isStorageHydrating) return;
 
     const saveData = async () => {
       setIsSyncing(true);
@@ -492,7 +502,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
     const id = setTimeout(saveData, 3000); // debounce 3s để giảm tải localforage
     return () => clearTimeout(id);
-  }, [state.present, isLoading]);
+  }, [state.present, isLoading, isStorageHydrating]);
 
   // ── Default center seeding ──
   useEffect(() => {
