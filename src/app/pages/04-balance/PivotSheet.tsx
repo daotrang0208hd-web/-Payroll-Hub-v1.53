@@ -1449,7 +1449,23 @@ export function PivotSheet() {
     } catch {
       // Ignore local storage quota/privacy errors.
     }
+    toast.success("Đã căn độ rộng cột Pivot Master theo dữ liệu");
   }, [safeTypeColumns, sortedFlatRows]);
+
+  const visibleTableWidth = useMemo(() => {
+    let total = 0;
+    if (!hiddenColumns.no) total += columnWidths.no || 50;
+    if (!hiddenColumns.business) total += columnWidths.business || 90;
+    if (!hiddenColumns.charge) total += columnWidths.charge || 220;
+    if (!hiddenColumns.month) total += columnWidths.month || 90;
+    safeTypeColumns.forEach((type) => {
+      if (!hiddenColumns[`type_${type}`]) {
+        total += columnWidths[`type_${type}`] || 120;
+      }
+    });
+    if (!hiddenColumns.grandTotal) total += columnWidths.grandTotal || 140;
+    return Math.max(total, 640);
+  }, [columnWidths, hiddenColumns, safeTypeColumns]);
 
   const totalRowsCount = sortedFlatRows.length;
   const totalPages =
@@ -1894,14 +1910,33 @@ export function PivotSheet() {
       {/* MAIN DATA TABLE */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[var(--card,#fff)]">
         <div className="flex-1 overflow-auto relative">
-          <table className="pivot-master-table w-full border-collapse select-none text-left text-xs" style={{ fontFamily: "var(--font-table, var(--font-mono))", fontSize: "13px" }}>
+          <table
+            className="pivot-master-table min-w-full border-collapse select-none table-fixed text-left text-xs"
+            style={{
+              fontFamily: "var(--font-table, var(--font-mono))",
+              fontSize: "13px",
+              width: `${visibleTableWidth}px`,
+            }}
+          >
+            <colgroup>
+              {!hiddenColumns.no && <col style={{ width: columnWidths.no || 50 }} />}
+              {!hiddenColumns.business && <col style={{ width: columnWidths.business || 90 }} />}
+              {!hiddenColumns.charge && <col style={{ width: columnWidths.charge || 220 }} />}
+              {!hiddenColumns.month && <col style={{ width: columnWidths.month || 90 }} />}
+              {safeTypeColumns.map((type) =>
+                hiddenColumns[`type_${type}`] ? null : (
+                  <col key={type} style={{ width: columnWidths[`type_${type}`] || 120 }} />
+                ),
+              )}
+              {!hiddenColumns.grandTotal && <col style={{ width: columnWidths.grandTotal || 140 }} />}
+            </colgroup>
             <thead className="sticky top-0 z-20 border-b border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] font-bold text-primary shadow-2xs">
               <tr>
                 {!hiddenColumns.no && (
                   <th 
                     style={{ width: columnWidths["no"] || 50, minWidth: columnWidths["no"] || 50, maxWidth: columnWidths["no"] || 50 }}
                     onClick={() => toggleSort("no")}
-                    className="relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
+                    className="group relative cursor-pointer border-r border-[#e7dbdc] bg-[var(--table-header-bg,var(--secondary,#FAF9F6))] px-2 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-primary transition-colors hover:bg-primary/[0.06]"
                   >
                     <span className="inline-flex items-center justify-center gap-1">
                       No.
@@ -1911,7 +1946,8 @@ export function PivotSheet() {
                           event.stopPropagation();
                           autoFitAllColumns();
                         }}
-                        className="inline-flex w-5 h-5 items-center justify-center rounded-full text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        className="pointer-events-none inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-500 opacity-0 transition-all group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-primary/10 hover:text-primary focus:pointer-events-auto focus:opacity-100"
                         title="Căn độ rộng tất cả cột theo dữ liệu"
                         aria-label="Căn độ rộng tất cả cột theo dữ liệu"
                       >

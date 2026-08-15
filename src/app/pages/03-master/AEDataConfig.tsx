@@ -585,7 +585,7 @@ export function AEDataConfig({
     e.target.value = ""; // Reset input
   };
 
-  const confirmUploads = async (
+  const confirmUploads = (
     choices: {
       file: File;
       action: "update" | "new" | "skip";
@@ -600,11 +600,6 @@ export function AEDataConfig({
       columnMapping?: Record<string, string>;
       status: string;
     }[] = [];
-    const preparedById = new Map<string, MasterWorkbookPayload>();
-    const processTargetIds = new Set<string>();
-
-    setIsProcessing(true);
-    setProcessingMessage("Đang tự động map cột...");
 
     const guessBank = (name: string) => {
       const u = name.toUpperCase();
@@ -619,54 +614,31 @@ export function AEDataConfig({
     const activeChoices = choices.filter((choice) => choice.action !== "skip");
     for (let index = 0; index < activeChoices.length; index++) {
       const choice = activeChoices[index];
-      if (choice.action === "skip") continue;
 
       const guessedBank = guessBank(choice.file.name);
       const id =
         choice.action === "update" && choice.targetId
           ? choice.targetId
           : `${Date.now()}-${index}-${generateUUID()}`;
-      let parsed: MasterWorkbookPayload | undefined;
-      let status = "Uploaded";
-
-      setProcessingMessage(
-        `Đang đọc file ${index + 1}/${activeChoices.length}: ${choice.file.name}`,
-      );
-      setProgress(
-        activeChoices.length > 0
-          ? Math.round(((index + 1) / activeChoices.length) * 25)
-          : 0,
-      );
-      try {
-        parsed = await parseMasterFileInWorker(
-          choice.file,
-          guessedBank === "MKT LOCAL NORTH",
-          masterAeFields,
-        );
-        preparedById.set(id, parsed);
-        preparedMasterFilesRef.current.set(id, parsed);
-        processTargetIds.add(id);
-      } catch (error: any) {
-        status = `Error: ${error?.message || String(error)}`;
-      }
+      preparedMasterFilesRef.current.delete(id);
 
       if (choice.action === "update" && choice.targetId) {
         updates.push({
           id: choice.targetId,
           file: choice.file,
           bank: guessedBank,
-          columnMapping: parsed?.mapping || {},
-          status,
+          columnMapping: {},
+          status: "ready",
         });
       } else if (choice.action === "new") {
         newRows.push({
           id,
           name: choice.file.name,
-          status,
+          status: "ready",
           fileObj: choice.file,
           bank: guessedBank,
           month: parseMonthFromFileName(choice.file.name) || appData.globalMonth || "",
-          columnMapping: parsed?.mapping || {},
+          columnMapping: {},
         });
       }
     }
@@ -698,19 +670,15 @@ export function AEDataConfig({
 
     setShowDialog(false);
     setPendingUploads([]);
-    const successfulTargets = nextInputs.filter(
-      (row) => row.fileObj && processTargetIds.has(row.id),
-    );
-    if (successfulTargets.length === 0) {
-      setIsProcessing(false);
-      toast.error("Không có file hợp lệ để xử lý.");
+    const uploadedCount = newRows.length + updates.length;
+    if (uploadedCount === 0) {
+      toast.info("Không có file nào được thêm vào danh sách.");
       return;
     }
 
     toast.success(
-      `Đã đọc ${successfulTargets.length}/${newRows.length + updates.length} file. Bắt đầu tổng hợp dữ liệu.`,
+      `Đã tải ${uploadedCount} file lên danh sách. Bấm “Xử lý dữ liệu” khi bạn muốn bắt đầu xử lý.`,
     );
-    await processAEData(successfulTargets, preparedById);
   };
 
   const processAEData = async (

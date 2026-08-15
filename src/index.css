@@ -1870,7 +1870,7 @@ div.audit-data-table-wrapper {
    and one scannable content row. All surfaces inherit the selected theme. */
 .audit-source-panel {
   border-color: color-mix(in srgb, var(--primary, #781d1d) 16%, var(--border, #cbd5e1)) !important;
-  border-radius: 12px !important;
+  border-radius: 0 !important;
   background: color-mix(in srgb, var(--primary, #781d1d) 2%, var(--card, #ffffff)) !important;
   box-shadow: 0 12px 32px -26px color-mix(in srgb, var(--primary, #781d1d) 45%, transparent) !important;
 }
@@ -1886,7 +1886,7 @@ div.audit-data-table-wrapper {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--primary, #781d1d) 16%, var(--border, #cbd5e1)) !important;
-  border-radius: 10px !important;
+  border-radius: 0 !important;
   background: var(--card, #ffffff) !important;
   box-shadow: 0 6px 18px -16px color-mix(in srgb, var(--primary, #781d1d) 48%, transparent) !important;
 }
