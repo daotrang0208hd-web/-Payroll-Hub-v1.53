@@ -2602,7 +2602,13 @@ export function AEDataConfig({
           </div>
         )}
 
-        <div className="data-table-wrapper flex-1 min-h-0 flex flex-col w-full max-w-full p-0 font-[family-name:var(--font-table,var(--font-main))] overflow-hidden" style={{ padding: "0px" }}>
+        <div
+          ref={(element) => {
+            element?.style.setProperty("padding", "0px", "important");
+          }}
+          className="data-table-wrapper master-config-data-table flex-1 min-h-0 flex flex-col w-full max-w-full p-0 font-[family-name:var(--font-table,var(--font-main))] overflow-hidden"
+          style={{ padding: "0px" }}
+        >
           <div className="table-body-region flex-1 min-h-0 w-full max-w-full overflow-auto custom-scrollbar bg-card shadow-none">
             <table className="master-config-table min-w-max w-full border-separate border-spacing-0 table-auto text-left" style={{ borderWidth: "0px" }}>
               <thead>
