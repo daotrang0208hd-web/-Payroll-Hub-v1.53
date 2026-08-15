@@ -325,12 +325,7 @@ export function PivotSheet() {
   const { appData } = useAppData();
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(() => {
-    try {
-      const cached = localStorage.getItem("pivot_master_selected_month_filter");
-      return cached || "ALL";
-    } catch {
-      return "ALL";
-    }
+    return appData.globalMonth || "03.2026";
   });
 
   const [groupedData, setGroupedData] = useState<Record<string, Record<string, Record<string, Record<string, number>>>>>(() => {
@@ -413,81 +408,6 @@ export function PivotSheet() {
   const safeTypeColumns = useMemo(() => (Array.isArray(typeColumns) ? typeColumns : []), [typeColumns]);
   const safeGroupedData = useMemo(() => (groupedData && typeof groupedData === "object" ? groupedData : {}), [groupedData]);
 
-  const uniqueMonths = useMemo(() => {
-    const set = new Set<string>();
-
-    const normalizeStr = (m: any) => {
-      if (!m) return null;
-      const str = String(m).trim();
-      if (!str) return null;
-      const match = str.match(/(?:THÁNG|THANG|T)?\s*(\d{1,2})[./\- ]\s*(\d{4})/i);
-      if (match) {
-        const mm = match[1].padStart(2, "0");
-        const yyyy = match[2];
-        return `${mm}.${yyyy}`;
-      }
-      const mOnly = str.match(/(?:THÁNG|THANG|T)?\s*(\d{1,2})\b/i);
-      if (mOnly) {
-        const mm = mOnly[1].padStart(2, "0");
-        return `${mm}.2026`;
-      }
-      return str;
-    };
-
-    (appData.Ae_Global_Inputs || []).forEach((row) => {
-      const m = row.month || parseMonthFromFileName(row.name || row.fileName || "", appData.globalMonth);
-      const norm = normalizeStr(m);
-      if (norm) set.add(norm);
-    });
-
-    (appData.Sheet1_AE?.data || []).forEach((r: any) => {
-      const m = r["Tháng báo cáo"] || r["_fileMonth"] || r["Tháng"];
-      const norm = normalizeStr(m);
-      if (norm) set.add(norm);
-    });
-
-    (appData.Hold_AE?.data || []).forEach((r: any) => {
-      const m = r["Tháng báo cáo"] || r["_fileMonth"] || r["Tháng phát sinh"];
-      const norm = normalizeStr(m);
-      if (norm) set.add(norm);
-    });
-
-    for (const bu in safeGroupedData) {
-      for (const l07 in safeGroupedData[bu]) {
-        for (const month in safeGroupedData[bu][l07]) {
-          const norm = normalizeStr(month);
-          if (norm) set.add(norm);
-        }
-      }
-    }
-
-    if (set.size === 0 && appData.globalMonth) {
-      const norm = normalizeStr(appData.globalMonth);
-      if (norm) set.add(norm);
-    }
-
-    return Array.from(set).sort((a, b) => {
-      const [ma, ya] = a.split(".").map(Number);
-      const [mb, yb] = b.split(".").map(Number);
-      if ((ya || 0) !== (yb || 0)) return (ya || 0) - (yb || 0);
-      return (ma || 0) - (mb || 0);
-    });
-  }, [appData.Ae_Global_Inputs, appData.Sheet1_AE?.data, appData.Hold_AE?.data, appData.globalMonth, safeGroupedData]);
-
-  useEffect(() => {
-    if (uniqueMonths.length > 0) {
-      if (!selectedMonthFilter || (selectedMonthFilter !== "ALL" && !uniqueMonths.includes(selectedMonthFilter))) {
-        const defaultMonth = uniqueMonths[0];
-        setSelectedMonthFilter(defaultMonth);
-        try {
-          localStorage.setItem("pivot_master_selected_month_filter", defaultMonth);
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }, [uniqueMonths, selectedMonthFilter]);
-
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
     try {
       const cached = localStorage.getItem("pivot_master_column_widths");
@@ -561,6 +481,7 @@ export function PivotSheet() {
         diagnosticLogs,
         sourceInfo: _sourceInfo,
         filter: selectedMonthFilter,
+        reportingMonth: appData.globalMonth || "03.2026",
         updatedAt: Date.now()
       }));
     } catch (e) {
@@ -624,7 +545,7 @@ export function PivotSheet() {
   const handleAddRow = () => {
     const defaultBU = "AHN";
     const defaultL07 = `CENTER_${Date.now().toString().slice(-4)}`;
-    const defaultMonth = selectedMonthFilter !== 'ALL' ? selectedMonthFilter : (appData.globalMonth || '03.2026');
+    const defaultMonth = appData.globalMonth || "03.2026";
     setGroupedData(prev => {
       const nextData = JSON.parse(JSON.stringify(prev));
       if (!nextData[defaultBU]) nextData[defaultBU] = {};
@@ -962,6 +883,14 @@ export function PivotSheet() {
   useEffect(() => {
     if (appData.globalMonth) {
       setSelectedMonthFilter(appData.globalMonth);
+      try {
+        localStorage.setItem(
+          "pivot_master_selected_month_filter",
+          appData.globalMonth,
+        );
+      } catch {
+        // ignore storage errors
+      }
     }
   }, [appData.globalMonth]);
 
@@ -981,6 +910,7 @@ export function PivotSheet() {
         if (
           !showToastMsg &&
           parsed.cacheVersion === PIVOT_CACHE_VERSION &&
+          parsed.reportingMonth === (appData.globalMonth || "03.2026") &&
           parsed.groupedData &&
           Object.keys(parsed.groupedData).length > 0
         ) {
@@ -1012,8 +942,14 @@ export function PivotSheet() {
           processedSheet1,
           [],
           [],
+          appData.globalMonth || "03.2026",
         );
-        const rosterResult = buildPivotFromAppData([], [], processedRoster);
+        const rosterResult = buildPivotFromAppData(
+          [],
+          [],
+          processedRoster,
+          appData.globalMonth || "03.2026",
+        );
         let mktTypeCache = readPivotMktTypeCache(
           cachedGroupedData,
           cachedTypeColumns,
@@ -1054,6 +990,7 @@ export function PivotSheet() {
             diagnosticLogs: [],
             sourceInfo: infoStr,
             filter: selectedMonthFilter,
+            reportingMonth: appData.globalMonth || "03.2026",
             updatedAt: Date.now(),
           }));
         } catch {
@@ -1072,7 +1009,7 @@ export function PivotSheet() {
       const fileBuffers: { name: string; bank?: string; buffer: ArrayBuffer; month: string }[] = [];
 
       for (const row of masterRows) {
-        const rowMonth = row.month || parseMonthFromFileName(row.name || "", appData.globalMonth) || appData.globalMonth || "03.2026";
+        const rowMonth = appData.globalMonth || row.month || parseMonthFromFileName(row.name || "", appData.globalMonth) || "03.2026";
 
         if (row.fileObj && row.fileObj instanceof File) {
           try {
@@ -1119,7 +1056,8 @@ export function PivotSheet() {
         const sheet1Res = buildPivotFromAppData(
           filteredSheet1,
           [],
-          filteredRoster
+          filteredRoster,
+          appData.globalMonth || "03.2026",
         );
         const sheet1Grouped = sheet1Res?.groupedData || {};
         const sheet1Types = sheet1Res?.typeColumns || [];
@@ -1170,6 +1108,7 @@ export function PivotSheet() {
             diagnosticLogs,
             sourceInfo: infoStr,
             filter: selectedMonthFilter,
+            reportingMonth: appData.globalMonth || "03.2026",
             updatedAt: Date.now()
           }));
         } catch {
@@ -1220,7 +1159,7 @@ export function PivotSheet() {
         const file = files[i];
         try {
           const buffer = await file.arrayBuffer();
-          const fileMonth = parseMonthFromFileName(file.name, appData.globalMonth) || appData.globalMonth || "06.2026";
+          const fileMonth = appData.globalMonth || parseMonthFromFileName(file.name, appData.globalMonth) || "06.2026";
           fileBuffers.push({ name: file.name, buffer, month: fileMonth });
         } catch (fErr) {
           console.warn(`Lỗi khi đọc file ${file.name}:`, fErr);
@@ -1273,6 +1212,7 @@ export function PivotSheet() {
           diagnosticLogs: mergedLogs,
           sourceInfo: infoStr,
           filter: selectedMonthFilter,
+          reportingMonth: appData.globalMonth || "03.2026",
           updatedAt: Date.now()
         }));
       } catch {

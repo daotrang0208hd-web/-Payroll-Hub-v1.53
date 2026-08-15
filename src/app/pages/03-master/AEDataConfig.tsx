@@ -13,14 +13,12 @@ import {
   Check,
   RefreshCw,
   ChevronLeft,
-  ChevronRight,
   ChevronDown,
   Wrench,
   Settings,
   Search,
   Folder,
   Download,
-  FileDown,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as XLSX from "xlsx";
@@ -241,8 +239,6 @@ export function AEDataConfig({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 50;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -286,52 +282,6 @@ export function AEDataConfig({
     "Center",
   ];
 
-  const downloadRowFile = (row: AERow) => {
-    if (row.fileObj) {
-      const url = URL.createObjectURL(row.fileObj);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = row.fileObj.name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`Đã tải xuống file: ${row.fileObj.name}`);
-    } else if (row.url) {
-      window.open(row.url, "_blank");
-    } else {
-      const sampleHeaders = [
-        "No", "ID Number", "Full name", "Bank Account Number", "Bank Name", "TOTAL PAYMENT", "CENTER"
-      ];
-      const sampleRow = [
-        1, "ID12345", "NGUYEN VAN A", "1234567890", "MB BANK", 5000000, "HN0001.PHY"
-      ];
-      const ws = XLSX.utils.aoa_to_sheet([sampleHeaders, sampleRow]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      const fileName = row.name ? (row.name.endsWith(".xlsx") ? row.name : `${row.name}.xlsx`) : "Sample_AE_File.xlsx";
-      XLSX.writeFile(wb, fileName);
-      toast.success(`Đã tải xuống file mẫu: ${fileName}`);
-    }
-  };
-
-  const downloadMasterTemplate = () => {
-    const sampleHeaders = [
-      "No", "ID Number", "Full name", "Bank Account Number", "Bank Name",
-      "CHARGE TO LXO", "CHARGE TO EC", "CHARGE TO PT-DEMO", "Charge MKT Local",
-      "CHARGE TO OTHER", "TOTAL PAYMENT", "CENTER"
-    ];
-    const sampleData = [
-      [1, "ID12345", "NGUYEN VAN A", "1234567890", "MB BANK", 5000000, 0, 0, 0, 0, 5000000, "HN0001.PHY"],
-      [2, "ID67890", "TRAN THI B", "0987654321", "TECHCOMBANK", 0, 3000000, 0, 0, 0, 3000000, "BN0001.LTT"],
-    ];
-    const ws = XLSX.utils.aoa_to_sheet([sampleHeaders, ...sampleData]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "SHEET 1");
-    XLSX.writeFile(wb, "Template_Files_from_AE.xlsx");
-    toast.success("Đã tải xuống file mẫu Template_Files_from_AE.xlsx");
-  };
-
   const exportConfigListToExcel = () => {
     if (!appData.Ae_Global_Inputs || appData.Ae_Global_Inputs.length === 0) {
       toast.error("Không có file/bản ghi cấu hình nào để tải xuống!");
@@ -357,12 +307,6 @@ export function AEDataConfig({
       row.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       (row.bank || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       (row.month || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
-  );
-
-  const totalPages = Math.ceil(filteredData.length / itemsPerPage);
-  const paginatedData = filteredData.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
   );
 
   const clearPageData = () => {
@@ -2367,11 +2311,13 @@ export function AEDataConfig({
           verifiedSheet1Data,
           [],
           [],
+          appData.globalMonth || "03.2026",
         );
         const rosterPivotResult = buildPivotFromAppData(
           [],
           [],
           rosterRowsForPivot,
+          appData.globalMonth || "03.2026",
         );
 
         let cachedPivotGroupedData = {};
@@ -2433,6 +2379,7 @@ export function AEDataConfig({
             typeColumns: pivotResult.typeColumns,
             diagnosticLogs: pivotResult.logs || [],
             sourceInfo: pivotResult.sourceInfo,
+            reportingMonth: appData.globalMonth || "03.2026",
             updatedAt: Date.now()
           }));
           window.dispatchEvent(new CustomEvent("pivot-data-updated", {
@@ -2476,14 +2423,14 @@ export function AEDataConfig({
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="page-master-config flex-1 flex flex-col min-h-0 bg-transparent m-0 gap-4 w-full h-full overflow-hidden"
-      style={{ padding: "6px" }}
+      className="page-master-config flex-1 flex flex-col min-h-0 bg-transparent m-0 gap-0 w-full h-full overflow-hidden"
+      style={{ padding: "0px" }}
     >
       {/* One shared frame for title, data area and pagination. */}
       <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-xl border border-border shadow-sm">
 
         {/* Integrated Header & Controls */}
-        <div className="master-config-header unified-table-frame-header relative z-10 flex w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 px-4 md:flex-row md:items-center">
+        <div className="hidden">
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
             <button
               type="button"
@@ -2628,14 +2575,6 @@ export function AEDataConfig({
                   <DropdownMenuSeparator className="bg-primary/10 mx-1.5" />
 
                   <DropdownMenuItem
-                    onClick={downloadMasterTemplate}
-                    className="cursor-pointer font-bold uppercase text-[0.6875rem] gap-3 hover:bg-emerald-50 text-emerald-600 p-3 rounded-xl transition-all"
-                  >
-                    <FileDown className="w-4 h-4" />
-                    <span>Tải file mẫu (Template)</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuItem
                     onClick={exportConfigListToExcel}
                     className="cursor-pointer font-bold uppercase text-[0.6875rem] gap-3 hover:bg-teal-50 text-teal-600 p-3 rounded-xl transition-all"
                   >
@@ -2693,7 +2632,21 @@ export function AEDataConfig({
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
                     className="sticky top-0 z-20 text-[0.8em] font-bold text-primary uppercase tracking-[0.18em] border-b border-r border-[#E2E8F0] whitespace-nowrap text-center min-w-[280px] shadow-[0_1px_0_rgba(0,0,0,0.1)]"
                   >
-                    TÊN FILE
+                    {showSearch ? (
+                      <div className="relative mx-auto w-full max-w-[260px]">
+                        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-primary/40" />
+                        <input
+                          type="text"
+                          value={searchTerm}
+                          onChange={(event) => setSearchTerm(event.target.value)}
+                          placeholder="Tìm tên file, bank, tháng..."
+                          className="h-7 w-full rounded-full border border-border bg-card pl-8 pr-3 text-[10px] font-medium normal-case tracking-normal text-foreground outline-none focus:border-primary"
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      "TÊN FILE"
+                    )}
                   </th>
                   <th
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
@@ -2723,12 +2676,72 @@ export function AEDataConfig({
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
                     className="sticky top-0 z-20 text-[0.8em] font-bold text-primary uppercase tracking-[0.18em] text-center border-b border-[#E2E8F0] whitespace-nowrap min-w-[70px] shadow-[0_1px_0_rgba(0,0,0,0.1)]"
                   >
-                    XÓA
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span>XÓA</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition-colors hover:bg-muted"
+                            aria-label="Mở thao tác bảng Master"
+                            title="Cài đặt & thao tác"
+                          >
+                            <Settings className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="z-[999999] w-64 rounded-2xl border border-border/50 bg-card p-2 text-card-foreground shadow-2xl">
+                          <DropdownMenuLabel className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                            Cài đặt &amp; tiện ích
+                          </DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => processAEData()} disabled={isProcessing} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
+                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
+                            <span>Xử lý dữ liệu</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={addRow} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
+                            <Plus className="h-4 w-4" />
+                            <span>Thêm dòng mới</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setShowSearch((value) => !value)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
+                            <Search className="h-4 w-4" />
+                            <span>{showSearch ? "Ẩn tìm kiếm" : "Hiện tìm kiếm"}</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-primary">
+                            <UploadCloud className="h-4 w-4" />
+                            <span>Upload nhiều file</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setFolderLinkDialogOpen(true)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-blue-600">
+                            <Folder className="h-4 w-4" />
+                            <span>Upload thư mục Google Drive</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={exportConfigListToExcel} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-teal-600">
+                            <Download className="h-4 w-4" />
+                            <span>Xuất danh sách cấu hình</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setShowClearDialog(true)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-rose-500">
+                            <Trash2 className="h-4 w-4" />
+                            <span>Xóa toàn bộ dữ liệu</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (onSwitchToFinal) onSwitchToFinal();
+                              else navigate("/master-ae");
+                            }}
+                            className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase"
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            <span>Về Gross Pay</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-card text-card-foreground">
-                {paginatedData.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
@@ -2750,7 +2763,7 @@ export function AEDataConfig({
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((row, idx) => (
+                  filteredData.map((row, idx) => (
                     <tr
                       key={row.id}
                       className="group animate-in fade-in duration-300 fill-mode-both"
@@ -2763,7 +2776,7 @@ export function AEDataConfig({
                         className="text-center border-b border-r border-[#E2E8F0] bg-card min-w-[50px]"
                       >
                         <span className="text-[0.875rem] font-medium text-foreground/40">
-                          {(currentPage - 1) * itemsPerPage + idx + 1}
+                          {idx + 1}
                         </span>
                       </td>
                       <td
@@ -2875,14 +2888,6 @@ export function AEDataConfig({
                             <LinkIcon className="w-4 h-4" />
                           </button>
 
-                          <button
-                            onClick={() => downloadRowFile(row)}
-                            className="p-1.5 rounded-full bg-teal-50 border border-teal-100 text-teal-600 hover:bg-teal-100 transition-colors shrink-0"
-                            title="Tải file về máy / Tải file mẫu"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
-
                           {row.fileObj && (
                             <button
                               onClick={() =>
@@ -2953,70 +2958,6 @@ export function AEDataConfig({
           </div>
         </div>
 
-        {/* Integrated Pagination */}
-        <div className="table-footer-pagination flex min-h-[52px] shrink-0 items-center justify-between border-t border-border bg-card px-4 py-2">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => processAEData()}
-              disabled={isProcessing}
-              className="p-1.5 text-primary/40 hover:text-primary hover:bg-primary/10 rounded-full transition-all group disabled:opacity-50"
-              title="Reload Files"
-            >
-              <RefreshCw
-                className={`w-4 h-4 ${isProcessing ? "animate-spin" : ""}`}
-              />
-            </button>
-            <p className="text-[0.625rem] font-bold uppercase tracking-widest text-foreground/40">
-              Hiển thị{" "}
-              <span className="text-foreground">
-                {(currentPage - 1) * itemsPerPage + 1}
-              </span>{" "}
-              -{" "}
-              <span className="text-foreground">
-                {Math.min(currentPage * itemsPerPage, filteredData.length)}
-              </span>{" "}
-              / <span className="text-foreground">{filteredData.length}</span>{" "}
-              file
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="h-7 w-7 flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-full disabled:opacity-30 transition-all border border-primary/10"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-1">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) pageNum = i + 1;
-                else if (currentPage <= 3) pageNum = i + 1;
-                else if (currentPage >= totalPages - 2)
-                  pageNum = totalPages - 4 + i;
-                else pageNum = currentPage - 2 + i;
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`h-7 w-7 flex items-center justify-center rounded-full font-bold text-[0.625rem] transition-all border ${currentPage === pageNum ? "bg-primary text-primary-foreground border-primary shadow-sm" : "text-primary/60 hover:bg-primary/10 border-primary/10"}`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() =>
-                setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-              }
-              disabled={currentPage === totalPages}
-              className="h-7 w-7 flex items-center justify-center text-primary/60 hover:bg-primary/10 rounded-full disabled:opacity-30 transition-all border border-primary/10"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
       </div>
 
       <input

@@ -1072,6 +1072,15 @@ export function UiSettingsModal({
             <button type="button" onClick={saveCompactSettings} className="h-12 min-w-16 bg-white px-3 text-[9px] font-black uppercase tracking-widest text-slate-950 hover:bg-slate-200">
               Lưu
             </button>
+            <button
+              type="button"
+              onClick={onClose}
+              title="Đóng tùy chỉnh DIV"
+              aria-label="Đóng tùy chỉnh DIV"
+              className="flex h-12 w-11 shrink-0 items-center justify-center border-l border-white/10 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </>
       )}

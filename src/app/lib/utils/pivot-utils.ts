@@ -331,9 +331,17 @@ const KNOWN_NON_CHARGE_KEYS = new Set([
 ]);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] = [], rosterRows: any[] = []) {
+export function buildPivotFromAppData(
+  sheet1Rows: any[] = [],
+  _holdRows: any[] = [],
+  rosterRows: any[] = [],
+  reportingMonth?: string,
+) {
   const newGroupedData: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
   const uniqueTypes = new Set<string>();
+  const activeReportingMonth = String(reportingMonth || "")
+    .trim()
+    .replace("/", ".");
 
   const parseMoney = (val: any): number => {
     if (typeof val === "number") return val;
@@ -346,16 +354,17 @@ export function buildPivotFromAppData(sheet1Rows: any[] = [], _holdRows: any[] =
   const addAmount = (buRaw: string, l07Raw: string, monthRaw: string, typeRaw: string, amount: number) => {
     if (!amount || isNaN(amount)) return;
     let bu = (buRaw || "").trim().toUpperCase();
-    let month = (monthRaw || "03.2026").trim();
+    const sourceMonth = (monthRaw || "03.2026").trim();
+    let month = activeReportingMonth || sourceMonth;
 
     // Sanity check: swap if BU is a month format (e.g. 03.2026, 03/2026, THÁNG 3) or month is a known BU
     const isMonthStr = (s: string) => /^\d{1,2}[./-]\d{2,4}$/.test(s) || /^(THÁNG|THANG|MONTH)\b/i.test(s);
     const isKnownBU = (s: string) => ["AHN", "EC", "LXO", "OTHER", "AFL", "AEC", "KINDY", "PRIMARY", "SECONDARY", "MKT"].includes(s.toUpperCase());
 
-    if (isMonthStr(bu) || (isKnownBU(month) && !isKnownBU(bu))) {
+    if (isMonthStr(bu) || (isKnownBU(sourceMonth) && !isKnownBU(bu))) {
       const temp = bu;
-      bu = month.toUpperCase();
-      month = temp;
+      bu = sourceMonth.toUpperCase();
+      if (!activeReportingMonth) month = temp;
     }
 
     if (!bu || bu === "UNKNOWN" || isMonthStr(bu)) {
