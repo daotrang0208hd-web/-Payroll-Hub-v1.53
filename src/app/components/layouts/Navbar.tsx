@@ -102,7 +102,6 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
   }, []);
 
   const isTimesheetPage = location.pathname === "/centers";
-  const isMasterAEPage = location.pathname === "/master-ae";
   
   const [masterActiveTab, setMasterActiveTab] = useState(() => {
     return (localStorage.getItem("master_ae_active_tab") as string) || "Sheet1_AE";
@@ -239,10 +238,6 @@ export function Navbar({ onToggleMobileMenu, onOpenSettings }: NavbarProps) {
                   <Link
                     key={item.id}
                     to={item.path}
-                    reloadDocument={
-                      item.id === "hold-dashboard" ||
-                      (isMasterAEPage && (item.id === "audit" || item.id === "centers"))
-                    }
                     className={`font-sans lowercase font-bold tracking-[0.1em] text-primary no-underline relative transition-opacity outline-none focus:outline-none focus-visible:outline-none ${
                       isActive ? "opacity-100 after:content-[''] after:absolute after:-bottom-[6px] after:left-0 after:w-full after:h-[1.5px] after:bg-primary" : "opacity-40 hover:opacity-100"
                     }`}

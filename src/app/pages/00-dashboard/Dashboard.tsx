@@ -122,7 +122,6 @@ export function Dashboard() {
                 >
                   <Link
                     to={c.path}
-                    reloadDocument={c.path === "/hold-dashboard"}
                     aria-label={`Mở ${c.title}`}
                     className="absolute inset-0 z-0 rounded-2xl"
                   />

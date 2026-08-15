@@ -80,9 +80,28 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [activePathname, setActivePathname] = useState(() =>
+    typeof window === "undefined" ? "/" : window.location.pathname,
+  );
   const persistedSplitRefs = useRef(
     new Map<keyof AppData, AppData[keyof AppData]>(),
   );
+
+  useEffect(() => {
+    const syncActivePathname = () => setActivePathname(window.location.pathname);
+    window.addEventListener("app-route-changed", syncActivePathname);
+    window.addEventListener("popstate", syncActivePathname);
+    return () => {
+      window.removeEventListener("app-route-changed", syncActivePathname);
+      window.removeEventListener("popstate", syncActivePathname);
+    };
+  }, []);
+
+  const needsHoldDerivedData =
+    activePathname.startsWith("/master-ae") ||
+    activePathname.startsWith("/hold-dashboard") ||
+    activePathname.startsWith("/payment") ||
+    activePathname.startsWith("/pivot");
 
   // ── Load from storage on mount ──
   useEffect(() => {
@@ -119,13 +138,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
             ...(savedMetadata || {}),
           } as AppData;
 
-          const splitValues = await Promise.all(
-            SPLIT_STORAGE_FIELDS.map((field) =>
-              localforage.getItem<AppData[typeof field]>(
+          const splitValues: Array<AppData[keyof AppData] | null> = [];
+          for (const field of SPLIT_STORAGE_FIELDS) {
+            splitValues.push(
+              await localforage.getItem<AppData[typeof field]>(
                 getSplitStorageKey(field),
               ),
-            ),
-          );
+            );
+            // Do not deserialize every large IndexedDB value concurrently.
+            // Yield between tables so navigation/clicks remain responsive for
+            // users with a large persisted Timesheet dataset.
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+          }
 
           // Early split-storage releases could write metadata while still
           // keeping the large arrays only in the legacy snapshot. Recover
@@ -310,18 +334,19 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
                 }
               }
             });
-            if (saved.Hold_AE.data && Array.isArray(saved.Hold_AE.data)) {
-              saved.Hold_AE.data = saved.Hold_AE.data.map((row: any) => {
-                const newRow = { ...row };
-                if (!newRow["Sheet Source"]) newRow["Sheet Source"] = "Unknown";
-                return newRow;
-              });
-            }
-            if (saved.Sheet1_AE && saved.Sheet1_AE.data && Array.isArray(saved.Sheet1_AE.data)) {
-              saved.Sheet1_AE.data = saved.Sheet1_AE.data.map((row: any) => {
-                const newRow = { ...row };
-                return newRow;
-              });
+            const holdRows = saved.Hold_AE.data;
+            if (
+              Array.isArray(holdRows) &&
+              holdRows.some((row: any) => row && !row["Sheet Source"])
+            ) {
+              saved.Hold_AE = {
+                ...saved.Hold_AE,
+                data: holdRows.map((row: any) =>
+                  row && !row["Sheet Source"]
+                    ? { ...row, "Sheet Source": "Unknown" }
+                    : row,
+                ),
+              };
             }
           }
           // ------------------------------
@@ -540,7 +565,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   // is available. This keeps the lookup result across report-month changes and
   // future uploads where a source file may be omitted.
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !needsHoldDerivedData) return;
 
     setState((prev) => {
       const holdRows = prev.present.Hold_AE?.data || [];
@@ -568,6 +593,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     });
   }, [
     isLoading,
+    needsHoldDerivedData,
     state.present.Hold_AE?.data,
     state.present.Sheet1_AE?.data,
     state.present.BankExport?.data,
@@ -576,6 +602,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   const computedHoldAE = useMemo(() => {
+    if (!needsHoldDerivedData) return Hold_AE;
     if (!Hold_AE || !Hold_AE.data) return Hold_AE;
 
     const currentPeriodParts = (globalMonth || "03.2026").split(".");
@@ -901,6 +928,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     Hold_AE,
     Sheet1_AE?.data,
     globalMonth,
+    needsHoldDerivedData,
   ]);
 
   const computedPresent = useMemo(() => {

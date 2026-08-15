@@ -13,6 +13,9 @@ export function Root() {
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    // AppDataProvider lives above RouterProvider, so publish route changes for
+    // route-scoped data work without forcing a document reload.
+    window.dispatchEvent(new Event("app-route-changed"));
   }, [location.pathname]);
 
   useEffect(() => {
