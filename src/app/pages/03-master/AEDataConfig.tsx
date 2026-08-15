@@ -13,6 +13,7 @@ import {
   Check,
   RefreshCw,
   ChevronLeft,
+  ChevronRight,
   ChevronDown,
   Wrench,
   Settings,
@@ -239,6 +240,8 @@ export function AEDataConfig({
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -308,6 +311,20 @@ export function AEDataConfig({
       (row.bank || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       (row.month || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
+  const paginatedData = filteredData.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearchTerm]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const clearPageData = () => {
     updateAppData((prev) => ({
@@ -2398,7 +2415,7 @@ export function AEDataConfig({
       <div className="unified-table-frame bg-card text-card-foreground flex-1 flex flex-col min-h-0 w-full max-w-full relative overflow-hidden rounded-xl border border-border shadow-sm">
 
         {/* Integrated Header & Controls */}
-        <div className="hidden">
+        <div className="master-config-header unified-table-frame-header relative z-10 flex w-full min-w-0 shrink-0 flex-col items-stretch justify-between gap-2 px-4 md:flex-row md:items-center">
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-2.5">
             <button
               type="button"
@@ -2585,7 +2602,7 @@ export function AEDataConfig({
           </div>
         )}
 
-        <div className="data-table-wrapper flex-1 min-h-0 flex flex-col w-full max-w-full font-[family-name:var(--font-table,var(--font-main))] overflow-hidden">
+        <div className="data-table-wrapper flex-1 min-h-0 flex flex-col w-full max-w-full p-0 font-[family-name:var(--font-table,var(--font-main))] overflow-hidden" style={{ padding: "0px" }}>
           <div className="table-body-region flex-1 min-h-0 w-full max-w-full overflow-auto custom-scrollbar bg-card shadow-none">
             <table className="master-config-table min-w-max w-full border-separate border-spacing-0 table-auto text-left" style={{ borderWidth: "0px" }}>
               <thead>
@@ -2600,21 +2617,7 @@ export function AEDataConfig({
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
                     className="sticky top-0 z-20 text-[0.8em] font-bold text-primary uppercase tracking-[0.18em] border-b border-r border-[#E2E8F0] whitespace-nowrap text-center min-w-[280px] shadow-[0_1px_0_rgba(0,0,0,0.1)]"
                   >
-                    {showSearch ? (
-                      <div className="relative mx-auto w-full max-w-[260px]">
-                        <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-primary/40" />
-                        <input
-                          type="text"
-                          value={searchTerm}
-                          onChange={(event) => setSearchTerm(event.target.value)}
-                          placeholder="Tìm tên file, bank, tháng..."
-                          className="h-7 w-full rounded-full border border-border bg-card pl-8 pr-3 text-[10px] font-medium normal-case tracking-normal text-foreground outline-none focus:border-primary"
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      "TÊN FILE"
-                    )}
+                    TÊN FILE
                   </th>
                   <th
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
@@ -2644,72 +2647,12 @@ export function AEDataConfig({
                     style={{ padding: "10px 14px", backgroundColor: "var(--table-header-bg, #FAF3E8)" }}
                     className="sticky top-0 z-20 text-[0.8em] font-bold text-primary uppercase tracking-[0.18em] text-center border-b border-[#E2E8F0] whitespace-nowrap min-w-[70px] shadow-[0_1px_0_rgba(0,0,0,0.1)]"
                   >
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span>XÓA</span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-primary shadow-sm transition-colors hover:bg-muted"
-                            aria-label="Mở thao tác bảng Master"
-                            title="Cài đặt & thao tác"
-                          >
-                            <Settings className="h-3.5 w-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="z-[999999] w-64 rounded-2xl border border-border/50 bg-card p-2 text-card-foreground shadow-2xl">
-                          <DropdownMenuLabel className="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                            Cài đặt &amp; tiện ích
-                          </DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => processAEData()} disabled={isProcessing} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
-                            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
-                            <span>Xử lý dữ liệu</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={addRow} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
-                            <Plus className="h-4 w-4" />
-                            <span>Thêm dòng mới</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setShowSearch((value) => !value)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase">
-                            <Search className="h-4 w-4" />
-                            <span>{showSearch ? "Ẩn tìm kiếm" : "Hiện tìm kiếm"}</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => fileInputRef.current?.click()} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-primary">
-                            <UploadCloud className="h-4 w-4" />
-                            <span>Upload nhiều file</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setFolderLinkDialogOpen(true)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-blue-600">
-                            <Folder className="h-4 w-4" />
-                            <span>Upload thư mục Google Drive</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={exportConfigListToExcel} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-teal-600">
-                            <Download className="h-4 w-4" />
-                            <span>Xuất danh sách cấu hình</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setShowClearDialog(true)} className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase text-rose-500">
-                            <Trash2 className="h-4 w-4" />
-                            <span>Xóa toàn bộ dữ liệu</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => {
-                              if (onSwitchToFinal) onSwitchToFinal();
-                              else navigate("/master-ae");
-                            }}
-                            className="cursor-pointer gap-3 rounded-xl p-3 text-[11px] font-bold uppercase"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                            <span>Về Gross Pay</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                    XÓA
                   </th>
                 </tr>
               </thead>
               <tbody className="bg-card text-card-foreground">
-                {filteredData.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <tr>
                     <td
                       colSpan={7}
@@ -2731,7 +2674,7 @@ export function AEDataConfig({
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((row, idx) => (
+                  paginatedData.map((row, idx) => (
                     <tr
                       key={row.id}
                       className="group animate-in fade-in duration-300 fill-mode-both"
@@ -2744,7 +2687,7 @@ export function AEDataConfig({
                         className="text-center border-b border-r border-[#E2E8F0] bg-card min-w-[50px]"
                       >
                         <span className="text-[0.875rem] font-medium text-foreground/40">
-                          {idx + 1}
+                          {(currentPage - 1) * itemsPerPage + idx + 1}
                         </span>
                       </td>
                       <td
@@ -2923,8 +2866,57 @@ export function AEDataConfig({
                 )}
               </tbody>
             </table>
+        </div>
+
+        <div className="table-footer-pagination flex min-h-[52px] shrink-0 items-center justify-between border-t border-border bg-card px-4 py-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => processAEData()}
+              disabled={isProcessing}
+              className="group rounded-full p-1.5 text-primary/40 transition-all hover:bg-primary/10 hover:text-primary disabled:opacity-50"
+              title="Xử lý dữ liệu các file đã tải"
+              aria-label="Xử lý dữ liệu các file đã tải"
+            >
+              <RefreshCw className={`h-4 w-4 ${isProcessing ? "animate-spin" : ""}`} />
+            </button>
+            <p className="text-[0.625rem] font-bold uppercase tracking-widest text-foreground/40">
+              Hiển thị{" "}
+              <span className="text-foreground">
+                {filteredData.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+              </span>{" "}
+              -{" "}
+              <span className="text-foreground">
+                {Math.min(currentPage * itemsPerPage, filteredData.length)}
+              </span>{" "}
+              / <span className="text-foreground">{filteredData.length}</span> file
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+              disabled={currentPage === 1}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/10 text-primary/60 transition-all hover:bg-primary/10 disabled:opacity-30"
+              aria-label="Trang trước"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[72px] text-center text-[0.625rem] font-bold uppercase tracking-widest text-foreground/60">
+              Trang {currentPage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+              disabled={currentPage === totalPages}
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-primary/10 text-primary/60 transition-all hover:bg-primary/10 disabled:opacity-30"
+              aria-label="Trang sau"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
+      </div>
 
       </div>
 
